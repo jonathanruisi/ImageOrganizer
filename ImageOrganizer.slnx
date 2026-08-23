@@ -4,7 +4,14 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="../Utility.NET/Utility.NET/Utility.NET.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="../Utility.NET/Utility.WinUI/Utility.WinUI.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
   <Project Path="ImageOrganizer.csproj">
+    <BuildDependency Project="../Utility.NET/Utility.WinUI/Utility.WinUI.csproj" />
     <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
     <Platform Solution="*|x86" Project="x86" />

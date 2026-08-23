@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ImageOrganizer.Controls.SystemBrowserControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:ImageOrganizer.Controls"
+    xmlns:imageorganizer="using:ImageOrganizer"
+    xmlns:viewmodel="using:ImageOrganizer.ViewModel"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Loaded="UserControl_Loaded">
+
+    <UserControl.Resources>
+        <!-- Data Templates -->
+        <DataTemplate x:Key="UnknownItemTemplate"
+                      x:DataType="viewmodel:IViewModelStorageItem">
+            <StackPanel Orientation="Horizontal">
+                <FontIcon x:Name="Symbol"
+                          Margin="0,0,6,0"
+                          FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xE9CE;"/>
+                <TextBlock HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Foreground="Red"
+                           FontStyle="Italic"
+                           Text="{x:Bind Name}"/>
+            </StackPanel>
+        </DataTemplate>
+        
+        <DataTemplate x:Key="DriveTemplate"
+                      x:DataType="viewmodel:ViewModelFolder">
+            <StackPanel Orientation="Horizontal">
+                <FontIcon x:Name="Symbol"
+                          Margin="0,0,6,0"
+                          FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xEDA2;"/>
+                <TextBlock HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind Name}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="FolderTemplate"
+                      x:DataType="viewmodel:ViewModelFolder">
+            <StackPanel Orientation="Horizontal">
+                <FontIcon x:Name="Symbol"
+                          Margin="0,0,6,0"
+                          FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xED41;"/>
+                <TextBlock HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind Name}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ImageSequenceTemplate"
+              x:DataType="viewmodel:ViewModelFolder">
+            <StackPanel Orientation="Horizontal"
+                        Background="{ThemeResource SystemFillColorAttentionBrush}">
+                <FontIcon x:Name="Symbol"
+                          Margin="0,0,6,0"
+                          FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xE786;"/>
+                <TextBlock HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           FontWeight="Bold"
+                           Text="{x:Bind Name}"/>
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ImageFileTemplate"
+                      x:DataType="viewmodel:ImageFile">
+            <Grid HorizontalAlignment="Stretch"
+                  VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal">
+                    <FontIcon HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Glyph="&#xE783;"
+                              Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                              Visibility="{x:Bind IsReady,
+                                                  Converter={StaticResource BoolToVisibilityConverter},
+                                                  ConverterParameter=True,
+                                                  Mode=OneWay}"/>
+                    <FontIcon HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Glyph="&#xE964;"
+                              Foreground="{ThemeResource SystemFillColorAttentionBrush}"
+                              Visibility="{x:Bind IsCached,
+                                                  Converter={StaticResource BoolToVisibilityConverter},
+                                                  ConverterParameter=False,
+                                                  Mode=OneWay}"/>
+                </StackPanel>
+
+                <FontIcon Grid.Column="1"
+                          Margin="0,0,6,0"
+                          FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xEB9F;"/>
+
+                <TextBlock Grid.Column="2"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind Name}"/>
+
+                <Ellipse Grid.Column="3"
+                         Fill="Gold"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=1,
+                                             Mode=OneWay}"/>
+
+                <Ellipse Grid.Column="4"
+                         Fill="CornflowerBlue"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=2,
+                                             Mode=OneWay}"/>
+
+                <Ellipse Grid.Column="5"
+                         Fill="IndianRed"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=3,
+                                             Mode=OneWay}"/>
+
+                <Ellipse Grid.Column="6"
+                         Fill="ForestGreen"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=4,
+                                             Mode=OneWay}"/>
+
+                <TextBlock Grid.Column="7"
+                           Text="T"
+                           FontWeight="Bold"
+                           Foreground="#606060"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           TextAlignment="Center"
+                           Visibility="{x:Bind Transform,
+                                               Converter={StaticResource ImageTransformToVisibilityConverter},
+                                               Mode=OneWay}"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="VideoFileTemplate"
+                      x:DataType="viewmodel:VideoFile">
+            <Grid HorizontalAlignment="Stretch"
+                          VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <FontIcon Grid.Column="0"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE783;"
+                          Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                          Visibility="{x:Bind IsReady,
+                                              Converter={StaticResource BoolToVisibilityConverter},
+                                              ConverterParameter=True,
+                                              Mode=OneWay}"/>
+
+                <FontIcon Grid.Column="1"
+                          Margin="0,0,6,0"
+                          FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xE8B2;"/>
+
+                <TextBlock Grid.Column="2"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind Name}"/>
+
+                <Ellipse Grid.Column="3"
+                         Fill="Gold"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=1,
+                                             Mode=OneWay}"/>
+
+                <Ellipse Grid.Column="4"
+                         Fill="CornflowerBlue"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=2,
+                                             Mode=OneWay}"/>
+
+                <Ellipse Grid.Column="5"
+                         Fill="IndianRed"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=3,
+                                             Mode=OneWay}"/>
+
+                <Ellipse Grid.Column="6"
+                         Fill="ForestGreen"
+                         Width="10"
+                         Height="10"
+                         Stretch="Fill"
+                         StrokeThickness="0"
+                         VerticalAlignment="Center"
+                         Margin="0,0,2,0"
+                         Visibility="{x:Bind Flags,
+                                             Converter={StaticResource FlagMaskConverter},
+                                             ConverterParameter=4,
+                                             Mode=OneWay}"/>
+            </Grid>
+        </DataTemplate>
+
+        <imageorganizer:ExplorerItemTemplateSelector x:Key="ExplorerItemTemplateSelector"
+                                                     DriveTemplate="{StaticResource DriveTemplate}"
+                                                     FolderTemplate="{StaticResource FolderTemplate}"
+                                                     ImageSequenceTemplate="{StaticResource ImageSequenceTemplate}"
+                                                     ImageFileTemplate="{StaticResource ImageFileTemplate}"
+                                                     VideoFileTemplate="{StaticResource VideoFileTemplate}"
+                                                     UnknownItemTemplate="{StaticResource UnknownItemTemplate}"/>
+    </UserControl.Resources>
+
+    <Grid Background="{x:Bind Background}"
+          BorderBrush="{x:Bind BorderBrush}"
+          BorderThickness="{x:Bind BorderThickness}"
+          CornerRadius="{x:Bind CornerRadius}"
+          HorizontalAlignment="{x:Bind HorizontalAlignment}"
+          VerticalAlignment="{x:Bind VerticalAlignment}">
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <CommandBar x:Name="SystemBrowserCommandBar"
+                    Grid.Row="0"
+                    FlowDirection="RightToLeft"
+                    DefaultLabelPosition="Collapsed"
+                    IsDynamicOverflowEnabled="False"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <CommandBar.PrimaryCommands>
+                <AppBarToggleButton Width="40"
+                                    Command="{x:Bind ViewModel.ToolsToggleFlag4Command}"
+                                    CommandParameter="4"
+                                    IsChecked="{x:Bind ViewModel.ActiveElement,
+                                                       Converter={StaticResource FlagMaskConverter},
+                                                       ConverterParameter=4,
+                                                       Mode=OneWay}"/>
+                <AppBarToggleButton Width="40"
+                                    Command="{x:Bind ViewModel.ToolsToggleFlag3Command}"
+                                    CommandParameter="3"
+                                    IsChecked="{x:Bind ViewModel.ActiveElement,
+                                                       Converter={StaticResource FlagMaskConverter},
+                                                       ConverterParameter=3,
+                                                       Mode=OneWay}"/>
+                <AppBarToggleButton Width="40"
+                                    Command="{x:Bind ViewModel.ToolsToggleFlag2Command}"
+                                    CommandParameter="2"
+                                    IsChecked="{x:Bind ViewModel.ActiveElement,
+                                                       Converter={StaticResource FlagMaskConverter},
+                                                       ConverterParameter=2,
+                                                       Mode=OneWay}"/>
+                <AppBarToggleButton Width="40"
+                                    Command="{x:Bind ViewModel.ToolsToggleFlag1Command}"
+                                    CommandParameter="1"
+                                    IsChecked="{x:Bind ViewModel.ActiveElement,
+                                                       Converter={StaticResource FlagMaskConverter},
+                                                       ConverterParameter=1,
+                                                       Mode=OneWay}"/>
+                <AppBarSeparator/>
+                <AppBarButton Width="40"
+                              Command="{x:Bind ViewModel.SystemBrowserUpOneLevelCommand}"/>
+            </CommandBar.PrimaryCommands>
+        </CommandBar>
+
+        <ListView x:Name="SystemBrowserListView"
+                  Grid.Row="1"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  SelectionMode="Extended"
+                  IsItemClickEnabled="False"
+                  IsRightTapEnabled="True"
+                  IsDoubleTapEnabled="True"
+                  SelectionChanged="SystemBrowserListView_SelectionChanged"
+                  DoubleTapped="SystemBrowserListView_DoubleTapped"
+                  RightTapped="SystemBrowserListView_RightTapped"
+                  ItemsSource="{x:Bind ViewModel.SystemBrowserFolder.Children, Mode=OneWay}"
+                  ItemTemplateSelector="{StaticResource ExplorerItemTemplateSelector}"/>
+    </Grid>
+</UserControl>
