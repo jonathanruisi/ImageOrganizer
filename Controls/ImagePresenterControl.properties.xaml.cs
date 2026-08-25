@@ -148,6 +148,18 @@ namespace ImageOrganizer.Controls
             DependencyProperty.Register(nameof(InteractionMode),
                                         typeof(InteractionMode),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(InteractionMode.Transform));
+                                        new PropertyMetadata(InteractionMode.Transform, OnInteractionModeChanged));
+
+        public float MaskOpacity
+        {
+            get => (float)GetValue(MaskOpacityProperty);
+            set => SetValue(MaskOpacityProperty, value);
+        }
+
+        public static readonly DependencyProperty MaskOpacityProperty =
+            DependencyProperty.Register(nameof(MaskOpacity),
+                                        typeof(float),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0.5f));
     }
 }

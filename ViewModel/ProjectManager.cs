@@ -70,7 +70,7 @@ namespace ImageOrganizer.ViewModel
         #endregion
 
         #region Private Methods
- 
+
         #endregion
     }
 }

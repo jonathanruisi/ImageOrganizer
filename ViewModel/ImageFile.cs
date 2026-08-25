@@ -1,14 +1,17 @@
-﻿using JLR.Utility.WinUI.ViewModel;
+﻿using JLR.Utility.NET;
+using JLR.Utility.WinUI.ViewModel;
 
 using Microsoft.Graphics.Canvas;
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 
+using Windows.Foundation;
 using Windows.Storage;
 
 namespace ImageOrganizer.ViewModel
@@ -62,10 +65,25 @@ namespace ImageOrganizer.ViewModel
         private CanvasBitmap? _bitmap;
         private double _blurScore = -1;
         private string? _checksum;
+        private Size _originalSize;
+        private Rect _boundingRect;
         private ImageTransform _transform;
         #endregion
 
         #region Properties
+        public Size OriginalSize
+        {
+            get => _originalSize;
+            private set => SetProperty(ref _originalSize, value);
+        }
+
+        //[ViewModelProperty(nameof(BoundingRect), XmlNodeType.Element)]
+        public Rect BoundingRect
+        {
+            get => _boundingRect;
+            private set => SetProperty(ref _boundingRect, value);
+        }
+
         [ViewModelProperty(nameof(Transform), XmlNodeType.Element, true, true)]
         public ImageTransform Transform
         {
@@ -106,6 +124,8 @@ namespace ImageOrganizer.ViewModel
             get => _checksum;
             private set => SetProperty(ref _checksum, value);
         }
+
+        public override MimeTypes ContentType => MimeTypes.Image;
         #endregion
 
         #region Constructors
@@ -115,6 +135,8 @@ namespace ImageOrganizer.ViewModel
         {
             _isCached = false;
             _bitmap = null;
+            _originalSize = Size.Empty;
+            _boundingRect = Rect.Empty;
             _transform = default;
         }
 
@@ -122,14 +144,24 @@ namespace ImageOrganizer.ViewModel
         {
             _isCached = false;
             _bitmap = null;
+            _originalSize = Size.Empty;
+            _boundingRect = Rect.Empty;
             _transform = default;
         }
         #endregion
 
         #region Public Methods
-        public async Task<bool> Cache(ICanvasResourceCreator? resourceCreator = null, float dpi = 96f)
+        public async Task<bool> Crop(double left, double right, double top, double bottom,
+                                     ICanvasResourceCreator? resourceCreator = null,
+                                     float dpi = 96f)
         {
-            if (await MakeReadyAsync() == false)
+            BoundingRect = new Rect(left, top, OriginalSize.Width - right - left, OriginalSize.Height - bottom - top);
+            return await Render(resourceCreator, dpi);
+        }
+
+        public async Task<bool> Render(ICanvasResourceCreator? resourceCreator = null, float dpi = 96f)
+        {
+            if (!IsReady && await MakeReadyAsync() == false)
             {
                 IsCached = false;
                 return false;
@@ -141,7 +173,7 @@ namespace ImageOrganizer.ViewModel
                 return false;
             }
 
-            if (Bitmap is not null)
+            if (Bitmap is not null && Bitmap.Size.Width == (int)BoundingRect.Width && Bitmap.Size.Height == (int)BoundingRect.Height)
             {
                 IsCached = true;
                 return true;
@@ -155,15 +187,21 @@ namespace ImageOrganizer.ViewModel
 
                 var rt = new CanvasRenderTarget(
                     resourceCreator,
-                    (float)sourceBitmap.Size.Width,
-                    (float)sourceBitmap.Size.Height,
+                    (float)BoundingRect.Width,
+                    (float)BoundingRect.Height,
                     dpi,
                     sourceBitmap.Format,
                     sourceBitmap.AlphaMode);
 
                 using (var ds = rt.CreateDrawingSession())
                 {
-                    ds.DrawImage(sourceBitmap);
+                    ds.DrawImage(sourceBitmap, 0, 0, BoundingRect);
+                }
+
+                if (Bitmap is not null)
+                {
+                    Bitmap.Dispose();
+                    Bitmap = null;
                 }
 
                 Bitmap = rt;
@@ -282,8 +320,34 @@ namespace ImageOrganizer.ViewModel
         #region Method Overrides (MediaFile)
         public override async Task<bool> MakeReadyAsync()
         {
-            IsReady = await base.MakeReadyAsync();
-            return IsReady;
+            // Load file from path
+            if (await base.MakeReadyAsync() == false)
+            {
+                IsReady = false;
+                return false;
+            }
+
+            // Read image file properties
+            try
+            {
+                var strWidth = "System.Image.HorizontalSize";
+                var strHeight = "System.Image.VerticalSize";
+                var propRequestList = new List<string> { strWidth, strHeight };
+                var propResultList = await File?.Properties.RetrievePropertiesAsync(propRequestList);
+
+                var width = (uint)propResultList[strWidth];
+                var height = (uint)propResultList[strHeight];
+                OriginalSize = new Size(width, height);
+                BoundingRect = new Rect(0, 0, width, height);
+            }
+            catch (Exception)
+            {
+                IsReady = false;
+                return false;
+            }
+
+            IsReady = true;
+            return true;
         }
         #endregion
 
@@ -309,6 +373,19 @@ namespace ImageOrganizer.ViewModel
                 };
             }
 
+            if (propertyName == nameof(BoundingRect))
+            {
+                if(content=="None")
+                    return default(Rect);
+
+                var values = content.Split(',');
+                var x = double.Parse(values[0]);
+                var y = double.Parse(values[1]);
+                var width = double.Parse(values[2]);
+                var height = double.Parse(values[3]);
+                return new Rect(x, y, width, height);
+            }
+
             return null;
         }
 
@@ -322,6 +399,17 @@ namespace ImageOrganizer.ViewModel
                         return "None";
                     else
                         return $"{transform.TranslationX},{transform.TranslationY},{transform.Rotation},{transform.Scale}";
+                }
+            }
+
+            if (propertyName == nameof(BoundingRect))
+            {
+                if (value is Rect rect)
+                {
+                    if (rect == default)
+                        return "None";
+                    else
+                        return $"{rect.X},{rect.Y},{rect.Width},{rect.Height}";
                 }
             }
             return null;

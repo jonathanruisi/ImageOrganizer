@@ -70,6 +70,14 @@
                           VerticalAlignment="Center"
                           Glyph="&#xE7A8;"/>
             </ToggleButton>
+            
+            <Button x:Name="CropTest"
+                    Width="40"
+                    Height="40"
+                    Padding="3"
+                    Margin="10,0,0,0"
+                    Content="Crop Test"
+                    Click="CropTest_Click"/>
         </StackPanel>
 
         <!-- Lower Toolbar -->

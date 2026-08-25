@@ -19,7 +19,6 @@ namespace ImageOrganizer.ViewModel
         private string _path;
         private StorageFile? _file;
         private bool _isReady;
-        private MimeTypes _contentType;
         #endregion
 
         #region Properties
@@ -53,11 +52,7 @@ namespace ImageOrganizer.ViewModel
             protected set => SetProperty(ref _isReady, value);
         }
 
-        public MimeTypes ContentType
-        {
-            get => _contentType;
-            protected set => SetProperty(ref _contentType, value);
-        }
+        public abstract MimeTypes ContentType { get; }
         #endregion
 
         #region Constructors
@@ -65,24 +60,20 @@ namespace ImageOrganizer.ViewModel
 
         protected ViewModelFile(string path)
         {
-            Id = string.Empty;
-            _path = path;
-            _file = null;
             _isReady = false;
-            _contentType = MimeTypes.Unknown;
+            _file = null;
+            _path = path;
+            Id = string.Empty;
             Name = string.Empty;
         }
 
         protected ViewModelFile(StorageFile file)
         {
-            Id = file?.FolderRelativeId ?? string.Empty;
-            _path = file?.Path ?? string.Empty;
-            _file = file;
             _isReady = false;
+            _file = file;
+            _path = file?.Path ?? string.Empty;
+            Id = file?.FolderRelativeId ?? string.Empty;
             Name = file?.DisplayName ?? string.Empty;
-            var mimeTypeString = file?.ContentType.Split('/', StringSplitOptions.RemoveEmptyEntries).First().ToLowerInvariant();
-            mimeTypeString ??= MimeTypes.Unknown.ToString();
-            _contentType = Enum.Parse<MimeTypes>(mimeTypeString, true);
         }
         #endregion
 
@@ -118,9 +109,9 @@ namespace ImageOrganizer.ViewModel
                 return false;
             }
 
-            //var contentTypeString = Enum.GetName(ContentType) ?? Enum.GetName(MimeTypes.Unknown);
-            //if (!File.ContentType.Contains(contentTypeString, StringComparison.CurrentCultureIgnoreCase))
-            //    throw new InvalidOperationException($"{contentTypeString} file expected");
+            var contentTypeString = Enum.GetName(ContentType) ?? Enum.GetName(MimeTypes.Unknown);
+            if (!File.ContentType.Contains(contentTypeString!, StringComparison.CurrentCultureIgnoreCase))
+                throw new InvalidOperationException($"{contentTypeString} file expected");
 
             return true;
         }

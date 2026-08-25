@@ -1,4 +1,5 @@
-﻿using JLR.Utility.WinUI.ViewModel;
+﻿using JLR.Utility.NET;
+using JLR.Utility.WinUI.ViewModel;
 
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,7 @@ namespace ImageOrganizer.ViewModel
         #endregion
 
         #region Properties
+        public override MimeTypes ContentType => MimeTypes.Image;
         #endregion
 
         #region Constructors

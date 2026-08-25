@@ -69,7 +69,7 @@ namespace ImageOrganizer
                 }
             }
 
-            var cacheResult = await imageFile.Cache(resourceCreator, _dpi);
+            var cacheResult = await imageFile.Render(resourceCreator, _dpi);
             //Debug.WriteLine($"{(cacheResult ? "CACHED" : "FAILED TO CACHE")} {imageFile.Name}");
             if (cacheResult == false)
                 return null;

@@ -450,7 +450,7 @@ namespace ImageOrganizer.ViewModel
                 {
                     if (!imageFile.IsCached)
                     {
-                        await imageFile.Cache();
+                        await imageFile.Render();
                     }
 
                     imageFile.ComputeChecksum(10.0);
