@@ -77,11 +77,11 @@ namespace ImageOrganizer.ViewModel
             private set => SetProperty(ref _originalSize, value);
         }
 
-        //[ViewModelProperty(nameof(BoundingRect), XmlNodeType.Element)]
+        [ViewModelProperty(nameof(BoundingRect), XmlNodeType.Element, true, true)]
         public Rect BoundingRect
         {
             get => _boundingRect;
-            private set => SetProperty(ref _boundingRect, value);
+            set => SetProperty(ref _boundingRect, value);
         }
 
         [ViewModelProperty(nameof(Transform), XmlNodeType.Element, true, true)]
@@ -151,11 +151,9 @@ namespace ImageOrganizer.ViewModel
         #endregion
 
         #region Public Methods
-        public async Task<bool> Crop(double left, double right, double top, double bottom,
-                                     ICanvasResourceCreator? resourceCreator = null,
-                                     float dpi = 96f)
+        public async Task<bool> CropAsync(Rect cropRect, ICanvasResourceCreator? resourceCreator = null, float dpi = 96f)
         {
-            BoundingRect = new Rect(left, top, OriginalSize.Width - right - left, OriginalSize.Height - bottom - top);
+            BoundingRect = new Rect(cropRect.Left, cropRect.Top, cropRect.Width, cropRect.Height);
             return await Render(resourceCreator, dpi);
         }
 
@@ -338,7 +336,8 @@ namespace ImageOrganizer.ViewModel
                 var width = (uint)propResultList[strWidth];
                 var height = (uint)propResultList[strHeight];
                 OriginalSize = new Size(width, height);
-                BoundingRect = new Rect(0, 0, width, height);
+                if (BoundingRect == Rect.Empty) // Don't overwrite if already set (e.g. from XML)
+                    BoundingRect = new Rect(0, 0, width, height);
             }
             catch (Exception)
             {

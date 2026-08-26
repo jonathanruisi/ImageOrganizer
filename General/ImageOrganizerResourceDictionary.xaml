@@ -7,7 +7,7 @@
 
     <!-- Converters -->
     <toolkit_converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-    <local:InteractionModeToBoolConverter x:Key="InteractionModeToBoolConverter"/>
+    <local:DecimalTextConverter x:Key="DecimalTextConverter"/>
     <local:ImageTransformToVisibilityConverter x:Key="ImageTransformToVisibilityConverter"/>
     <local:FlagMaskConverter x:Key="FlagMaskConverter"/>
 </ResourceDictionary>

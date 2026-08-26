@@ -114,6 +114,90 @@ namespace ImageOrganizer.Controls
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(1.0, OnImageTransformChanged));
 
+        public bool AllowManualTranslation
+        {
+            get => (bool)GetValue(AllowManualTranslationProperty);
+            set => SetValue(AllowManualTranslationProperty, value);
+        }
+
+        public static readonly DependencyProperty AllowManualTranslationProperty =
+            DependencyProperty.Register(nameof(AllowManualTranslation),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false));
+
+        public bool AllowManualScaling
+        {
+            get => (bool)GetValue(AllowManualScalingProperty);
+            set => SetValue(AllowManualScalingProperty, value);
+        }
+
+        public static readonly DependencyProperty AllowManualScalingProperty =
+            DependencyProperty.Register(nameof(AllowManualScaling),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false));
+
+        public bool AllowManualRotation
+        {
+            get => (bool)GetValue(AllowManualRotationProperty);
+            set => SetValue(AllowManualRotationProperty, value);
+        }
+
+        public static readonly DependencyProperty AllowManualRotationProperty =
+            DependencyProperty.Register(nameof(AllowManualRotation),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false));
+
+        public bool EnableCropMode
+        {
+            get => (bool)GetValue(EnableCropModeProperty);
+            set => SetValue(EnableCropModeProperty, value);
+        }
+
+        public static readonly DependencyProperty EnableCropModeProperty =
+            DependencyProperty.Register(nameof(EnableCropMode),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnEnableCropModeChanged));
+
+        public double SnapDistance
+        {
+            get => (double)GetValue(SnapDistanceProperty);
+            set => SetValue(SnapDistanceProperty, value);
+        }
+
+        public static readonly DependencyProperty SnapDistanceProperty =
+            DependencyProperty.Register(nameof(SnapDistance),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(10.0));
+
+        public int RotationRate
+        {
+            get => (int)GetValue(RotationRateProperty);
+            set => SetValue(RotationRateProperty, value);
+        }
+
+        public static readonly DependencyProperty RotationRateProperty =
+            DependencyProperty.Register(nameof(RotationRate),
+                                        typeof(int),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(5));
+
+        public float MaskOpacity
+        {
+            get => (float)GetValue(MaskOpacityProperty);
+            set => SetValue(MaskOpacityProperty, value);
+        }
+
+        public static readonly DependencyProperty MaskOpacityProperty =
+            DependencyProperty.Register(nameof(MaskOpacity),
+                                        typeof(float),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0.5f));
+
         public int CacheCapacity
         {
             get => (int)GetValue(CacheCapacityProperty);
@@ -137,29 +221,5 @@ namespace ImageOrganizer.Controls
                                         typeof(int),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(25));
-
-        public InteractionMode InteractionMode
-        {
-            get => (InteractionMode)GetValue(InteractionModeProperty);
-            set => SetValue(InteractionModeProperty, value);
-        }
-
-        public static readonly DependencyProperty InteractionModeProperty =
-            DependencyProperty.Register(nameof(InteractionMode),
-                                        typeof(InteractionMode),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(InteractionMode.Transform, OnInteractionModeChanged));
-
-        public float MaskOpacity
-        {
-            get => (float)GetValue(MaskOpacityProperty);
-            set => SetValue(MaskOpacityProperty, value);
-        }
-
-        public static readonly DependencyProperty MaskOpacityProperty =
-            DependencyProperty.Register(nameof(MaskOpacity),
-                                        typeof(float),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(0.5f));
     }
 }

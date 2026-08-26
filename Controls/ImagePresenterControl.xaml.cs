@@ -31,39 +31,33 @@ using System.Threading.Tasks;
 
 using Windows.Foundation;
 using Windows.Foundation.Collections;
+using Windows.System;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 
 namespace ImageOrganizer.Controls
 {
-    public enum InteractionMode
-    {
-        None,
-        Transform,
-        Crop
-    }
-
     public sealed partial class ImagePresenterControl : UserControl
     {
         #region Fields
-        private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _renderTimer;
-        private CanvasBitmap? _bitmap;
         private readonly Lock _bitmapLock = new();
-        private Matrix3x2 _transform = Matrix3x2.Identity;
         private readonly Lock _transformLock = new();
+        private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _renderTimer;
         private readonly LruBitmapCache _bitmapCache;
         private readonly InputCursor _primaryCursor, _secondaryCursor, _hoverCursor, _dragCursor;
         private readonly InputCursor _dragWECursor, _dragNSCursor, _dragNESWCursor, _dragNWSECursor;
-        private bool _isScaling = false;
-        private bool _isPointerCapturedForImage = false;
-        private bool _isPreCaching = false;
-        private Point _lastPointerPosition;
-        private RectLocations? _lastCropRectLocation = null;
-        private Rect _imageSourceRect;
-        private Rect _cropRect;
-        private Quadrilateral _scaledImageSourceQuadrilateral = Quadrilateral.Zero;
-        private int _mediaIndex, _mediaTotal;
+        private CanvasBitmap? _bitmap;
         private ImageFile? _currentImageFile;
+        private int _mediaIndex, _mediaTotal;
+        private Matrix3x2 _transform = Matrix3x2.Identity;
+        private bool _isPreCaching = false;
+        private bool _isScaling = false;
+        private Rect _cropRect;
+        private Quadrilateral _transformedImageQuadrilateral = Quadrilateral.Zero;
+        private bool _isPointerCapturedForImage = false;
+        private bool _isPointerCapturedForCrop = false;
+        private Point _previousPointerPosition = new(0, 0);
+        private RectLocations _capturedCropRectLocation = RectLocations.Outside;
         #endregion
 
         #region Properties
@@ -114,7 +108,10 @@ namespace ImageOrganizer.Controls
             _currentImageFile = imageFile;
             DisplayCurrentImageFile();
 
-            InteractionMode = InteractionMode.Transform;
+            AllowManualTranslation = true;
+            AllowManualScaling = true;
+            AllowManualRotation = true;
+            EnableCropMode = false;
         }
 
         public void ClearImage()
@@ -125,13 +122,20 @@ namespace ImageOrganizer.Controls
                 _bitmap = null;
             }
 
-            _imageSourceRect = Rect.Zero;
-            _scaledImageSourceQuadrilateral = Quadrilateral.Zero;
+            _transformedImageQuadrilateral = Quadrilateral.Zero;
+            _isPointerCapturedForImage = false;
+            _isPointerCapturedForCrop = false;
+            _previousPointerPosition = new(0, 0);
+            _capturedCropRectLocation = RectLocations.Outside;
             ImageTranslationX = 0;
             ImageTranslationY = 0;
             ImageRotation = 0;
             ImageScale = 1;
-            InteractionMode = InteractionMode.None;
+
+            AllowManualTranslation = false;
+            AllowManualScaling = false;
+            AllowManualRotation = false;
+            EnableCropMode = false;
         }
 
         public void ScaleImageToFit()
@@ -216,28 +220,23 @@ namespace ImageOrganizer.Controls
             ip._bitmapCache.Capacity = ((int)e.NewValue);
         }
 
-        private static void OnInteractionModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnEnableCropModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is not ImagePresenterControl ip)
                 return;
 
-            switch (ip.InteractionMode)
+            if (ip.EnableCropMode && ip._currentImageFile != null)
             {
-                case InteractionMode.None:
-                    ip._cropRect = Rect.Empty;
-                    break;
-                case InteractionMode.Transform:
-                    ip._cropRect = Rect.Empty;
-                    break;
-                case InteractionMode.Crop:
-                    if (ip._currentImageFile != null)
-                    {
-                        ip.ImageRotation = 0;
-                        ip._cropRect = ip._scaledImageSourceQuadrilateral.BoundingBox;
-                    }
-                    else
-                        ip._cropRect = Rect.Empty;
-                    break;
+                ip.AllowManualRotation = false;
+                ip.ToggleButtonAllowRotation.IsEnabled = false;
+                ip.ImageRotation = 0;
+                ip._cropRect = ip._transformedImageQuadrilateral.BoundingBox;
+            }
+            else
+            {
+                ip.AllowManualRotation = true;
+                ip.ToggleButtonAllowRotation.IsEnabled = true;
+                ip._cropRect = Rect.Empty;
             }
         }
         #endregion
@@ -264,16 +263,46 @@ namespace ImageOrganizer.Controls
             bitmapToDispose?.Dispose();
             _bitmapCache.Dispose();
         }
-        #endregion
 
-        #region Event Handlers (Controls)
-        private async void CropTest_Click(object sender, RoutedEventArgs e)
+        private async void UserControl_KeyboardAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
         {
-            if (_currentImageFile is null)
+            if (e.Handled)
                 return;
 
-            await _currentImageFile.Crop(500, 500, 500, 500);
-            DisplayCurrentImageFile();
+            if (sender.Key == VirtualKey.Escape)
+            {
+                if (EnableCropMode)
+                {
+                    EnableCropMode = false;
+                    e.Handled = true;
+                }
+            }
+            else if (sender.Key == VirtualKey.Enter)
+            {
+                if (EnableCropMode && _currentImageFile is not null)
+                {
+                    var sourceCropRect = GetSourceCropRect();
+                    if (sourceCropRect.IsEmpty)
+                        return;
+
+                    await _currentImageFile.CropAsync(sourceCropRect);
+                    EnableCropMode = false;
+                    DisplayCurrentImageFile();
+                    e.Handled = true;
+                }
+            }
+            else if (sender.Key == VirtualKey.F)
+            {
+                if (_currentImageFile is not null)
+                {
+                    if (sender.Modifiers.HasFlag(VirtualKeyModifiers.Control))
+                        ImageScale = 1;
+                    else
+                        ScaleImageToFit();
+
+                    e.Handled = true;
+                }
+            }
         }
         #endregion
 
@@ -355,7 +384,7 @@ namespace ImageOrganizer.Controls
             }
 
             // If in cropping mode, shade the area outside the crop rectangle
-            if (InteractionMode == InteractionMode.Crop && !_cropRect.IsEmpty)
+            if (EnableCropMode && !_cropRect.IsEmpty)
             {
                 var cropRect = _cropRect;
                 var panelWidth = SwapChainPanel.ActualWidth;
@@ -411,7 +440,7 @@ namespace ImageOrganizer.Controls
         #region Event Handlers (Pointer)
         private void PresentationBorder_PointerEntered(object sender, PointerRoutedEventArgs e)
         {
-            if (_isPointerCapturedForImage)
+            if (_isPointerCapturedForImage || _isPointerCapturedForCrop)
                 return;
 
             ProtectedCursor = _primaryCursor;
@@ -419,7 +448,7 @@ namespace ImageOrganizer.Controls
 
         private void PresentationBorder_PointerExited(object sender, PointerRoutedEventArgs e)
         {
-            if (_isPointerCapturedForImage)
+            if (_isPointerCapturedForImage || _isPointerCapturedForCrop)
                 return;
 
             ProtectedCursor = _primaryCursor;
@@ -428,164 +457,242 @@ namespace ImageOrganizer.Controls
         private void PresentationBorder_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             var point = e.GetCurrentPoint(PresentationBorder);
-            if (point.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed)
+            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+
+            if (point.Properties.IsLeftButtonPressed)
             {
-                var isNearCropRect = _cropRect.IsPointOnOrNear(point.Position, 10);
-                if (InteractionMode != InteractionMode.None && _scaledImageSourceQuadrilateral.Contains(point.Position) && !isNearCropRect.HasValue)
+                // Left-click occured on or within the crop rectangle,
+                // so capture the pointer for cropping
+                if (EnableCropMode && cropRectProximity != RectLocations.Outside)
                 {
-                    if (e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))
+                    _isPointerCapturedForCrop = PresentationBorder.CapturePointer(e.Pointer);
+                    _capturedCropRectLocation = cropRectProximity;
+                }
+                // Left-click occured within the image bounds
+                else if (isWithinImage && AllowManualTranslation)
+                {
+                    // If the Control key is held down, center the image on the pointer position
+                    if (e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control))
                     {
                         var centerX = SwapChainPanel.ActualWidth / 2;
                         var centerY = SwapChainPanel.ActualHeight / 2;
                         ImageTranslationX += centerX - point.Position.X;
                         ImageTranslationY += centerY - point.Position.Y;
                     }
+                    // Otherwise, capture the pointer for dragging the image
                     else
                     {
                         _isPointerCapturedForImage = PresentationBorder.CapturePointer(e.Pointer);
                         ProtectedCursor = _dragCursor;
                     }
                 }
-                else if (InteractionMode == InteractionMode.Crop)
+            }
+            else if (point.Properties.IsRightButtonPressed)
+            {
+                // Reset the crop rectangle to the bounding box of the image
+                if (EnableCropMode && cropRectProximity != RectLocations.Outside)
                 {
-                    if (isNearCropRect.HasValue)
-                    {
-                        _lastCropRectLocation = isNearCropRect.Value;
-                        _isPointerCapturedForImage = PresentationBorder.CapturePointer(e.Pointer);
-                    }
+                    _cropRect = _transformedImageQuadrilateral.BoundingBox;
                 }
             }
-
-            _lastPointerPosition = point.Position;
         }
 
         private void PresentationBorder_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
             var point = e.GetCurrentPoint(PresentationBorder);
-            if (point.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonReleased)
-            {
-                PresentationBorder.ReleasePointerCapture(e.Pointer);
-                var isNearCropRect = _cropRect.IsPointOnOrNear(point.Position, 10);
-                if (InteractionMode == InteractionMode.Transform && _scaledImageSourceQuadrilateral.Contains(point.Position) && !isNearCropRect.HasValue)
-                    ProtectedCursor = _hoverCursor;
-                else if (InteractionMode == InteractionMode.Crop)
-                    SetCursorForCropMode(isNearCropRect);
-                else
-                    ProtectedCursor = _primaryCursor;
-            }
+            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
 
-            _lastPointerPosition = point.Position;
+            SetCursor(isWithinImage, cropRectProximity);
+            _isPointerCapturedForImage = false;
+            _isPointerCapturedForCrop = false;
         }
 
         private void PresentationBorder_PointerCanceled(object sender, PointerRoutedEventArgs e)
         {
+            var point = e.GetCurrentPoint(PresentationBorder);
+            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+
+            SetCursor(isWithinImage, cropRectProximity);
             _isPointerCapturedForImage = false;
-            _lastPointerPosition = new Point(double.NaN, double.NaN);
+            _isPointerCapturedForCrop = false;
         }
 
         private void PresentationBorder_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
         {
+            var point = e.GetCurrentPoint(PresentationBorder);
+            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+
+            SetCursor(isWithinImage, cropRectProximity);
             _isPointerCapturedForImage = false;
+            _isPointerCapturedForCrop = false;
         }
 
         private void PresentationBorder_PointerMoved(object sender, PointerRoutedEventArgs e)
         {
             var point = e.GetCurrentPoint(PresentationBorder);
-            var isWithin = _scaledImageSourceQuadrilateral.Contains(point.Position);
+            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+            var deltaX = point.Position.X - _previousPointerPosition.X;
+            var deltaY = point.Position.Y - _previousPointerPosition.Y;
 
-            if (InteractionMode == InteractionMode.Crop && !_isPointerCapturedForImage)
-                SetCursorForCropMode(_cropRect.IsPointOnOrNear(point.Position, 10));
-            else if (isWithin && InteractionMode != InteractionMode.None && ProtectedCursor != _hoverCursor)
-                ProtectedCursor = _hoverCursor;
-            else if ((!isWithin || InteractionMode == InteractionMode.None) && ProtectedCursor != _primaryCursor)
-                ProtectedCursor = _primaryCursor;
-
-            if (point.Properties.IsLeftButtonPressed && _isPointerCapturedForImage)
+            // Resize the crop rectangle if the pointer is on or near one of its edges or corners,
+            // or move the crop rectangle if the pointer is inside it.
+            if (_isPointerCapturedForCrop && point.Properties.IsLeftButtonPressed)
             {
-                if(InteractionMode != InteractionMode.None && !_lastCropRectLocation.HasValue)
+                switch (_capturedCropRectLocation)
                 {
-                    if (ProtectedCursor != _dragCursor)
-                        ProtectedCursor = _dragCursor;
-
-                    ImageTranslationX += point.Position.X - _lastPointerPosition.X;
-                    ImageTranslationY += point.Position.Y - _lastPointerPosition.Y;
+                    case RectLocations.Left:
+                        AdjustX();
+                        AdjustWidthMinus();
+                        break;
+                    case RectLocations.Top:
+                        AdjustY();
+                        AdjustHeightMinus();
+                        break;
+                    case RectLocations.Bottom:
+                        AdjustHeightPlus();
+                        break;
+                    case RectLocations.Right:
+                        AdjustWidthPlus();
+                        break;
+                    case RectLocations.TopLeft:
+                        AdjustX();
+                        AdjustWidthMinus();
+                        AdjustY();
+                        AdjustHeightMinus();
+                        break;
+                    case RectLocations.TopRight:
+                        AdjustWidthPlus();
+                        AdjustY();
+                        AdjustHeightMinus();
+                        break;
+                    case RectLocations.BottomRight:
+                        AdjustWidthPlus();
+                        AdjustHeightPlus();
+                        break;
+                    case RectLocations.BottomLeft:
+                        AdjustX();
+                        AdjustWidthMinus();
+                        AdjustHeightPlus();
+                        break;
+                    case RectLocations.Inside:
+                        AdjustX(true);
+                        AdjustY(true);
+                        break;
                 }
-                else if(InteractionMode == InteractionMode.Crop && _lastCropRectLocation.HasValue)
-                {
-                    var deltaX = point.Position.X - _lastPointerPosition.X;
-                    var deltaY = point.Position.Y - _lastPointerPosition.Y;
 
-                    switch (_lastCropRectLocation.Value)
-                    {
-                        case RectLocations.Left:
-                            _cropRect.X += deltaX;
-                            _cropRect.Width -= deltaX;
-                            break;
-                        case RectLocations.Top:
-                            _cropRect.Y += deltaY;
-                            _cropRect.Height -= deltaY;
-                            break;
-                        case RectLocations.Bottom:
-                            _cropRect.Height += deltaY;
-                            break;
-                        case RectLocations.Right:
-                            _cropRect.Width += deltaX;
-                            break;
-                        case RectLocations.TopLeft:
-                            _cropRect.X += deltaX;
-                            _cropRect.Width -= deltaX;
-                            _cropRect.Y += deltaY;
-                            _cropRect.Height -= deltaY;
-                            break;
-                        case RectLocations.TopRight:
-                            _cropRect.Width += deltaX;
-                            _cropRect.Y += deltaY;
-                            _cropRect.Height -= deltaY;
-                            break;
-                        case RectLocations.BottomRight:
-                            _cropRect.Width += deltaX;
-                            _cropRect.Height += deltaY;
-                            break;
-                        case RectLocations.BottomLeft:
-                            _cropRect.X += deltaX;
-                            _cropRect.Width -= deltaX;
-                            _cropRect.Height += deltaY;
-                            break;
-                    }
+                void AdjustX(bool includeWidth = false)
+                {
+                    if (_cropRect.X + deltaX < _transformedImageQuadrilateral.BoundingBox.Left)
+                        _cropRect.X = _transformedImageQuadrilateral.BoundingBox.Left;
+                    else if (includeWidth && _cropRect.X + _cropRect.Width + deltaX > _transformedImageQuadrilateral.BoundingBox.Right)
+                        _cropRect.X = _transformedImageQuadrilateral.BoundingBox.Right - _cropRect.Width;
+                    else if (_cropRect.X + deltaX > _cropRect.Right - 1)
+                        _cropRect.X = _cropRect.Right - 1;
+                    else
+                        _cropRect.X += deltaX;
+                }
+
+                void AdjustY(bool includeHeight = false)
+                {
+                    if (_cropRect.Y + deltaY < _transformedImageQuadrilateral.BoundingBox.Top)
+                        _cropRect.Y = _transformedImageQuadrilateral.BoundingBox.Top;
+                    else if (includeHeight && _cropRect.Y + _cropRect.Height + deltaY > _transformedImageQuadrilateral.BoundingBox.Bottom)
+                        _cropRect.Y = _transformedImageQuadrilateral.BoundingBox.Bottom - _cropRect.Height;
+                    else if (_cropRect.Y + deltaY > _cropRect.Bottom - 1)
+                        _cropRect.Y = _cropRect.Bottom - 1;
+                    else
+                        _cropRect.Y += deltaY;
+                }
+
+                void AdjustWidthPlus()
+                {
+                    if (_cropRect.Width + deltaX < 1)
+                        _cropRect.Width = 1;
+                    else if (_cropRect.Width + deltaX > _transformedImageQuadrilateral.BoundingBox.Width)
+                        _cropRect.Width = _transformedImageQuadrilateral.BoundingBox.Width;
+                    else
+                        _cropRect.Width += deltaX;
+                }
+
+                void AdjustWidthMinus()
+                {
+                    if (_cropRect.Width - deltaX < 1)
+                        _cropRect.Width = 1;
+                    else if (_cropRect.Width - deltaX > _transformedImageQuadrilateral.BoundingBox.Width)
+                        _cropRect.Width = _transformedImageQuadrilateral.BoundingBox.Width;
+                    else
+                        _cropRect.Width -= deltaX;
+                }
+
+                void AdjustHeightPlus()
+                {
+                    if (_cropRect.Height + deltaY < 1)
+                        _cropRect.Height = 1;
+                    else if (_cropRect.Height + deltaY > _transformedImageQuadrilateral.BoundingBox.Height)
+                        _cropRect.Height = _transformedImageQuadrilateral.BoundingBox.Height;
+                    else
+                        _cropRect.Height += deltaY;
+                }
+
+                void AdjustHeightMinus()
+                {
+                    if (_cropRect.Height - deltaY < 1)
+                        _cropRect.Height = 1;
+                    else if (_cropRect.Height - deltaY > _transformedImageQuadrilateral.BoundingBox.Height)
+                        _cropRect.Height = _transformedImageQuadrilateral.BoundingBox.Height;
+                    else
+                        _cropRect.Height -= deltaY;
                 }
             }
+            // If the pointer is captured for image translation,
+            // move the image by the pointer delta.
+            else if (_isPointerCapturedForImage && point.Properties.IsLeftButtonPressed)
+            {
+                ImageTranslationX += deltaX;
+                ImageTranslationY += deltaY;
+            }
+            // If the pointer is not captured,
+            // update the cursor based on its position relative to the image and crop rectangle.
+            else
+            {
+                SetCursor(isWithinImage, cropRectProximity);
+            }
 
-            _lastPointerPosition = point.Position;
+            _previousPointerPosition = point.Position;
         }
 
         private void PresentationBorder_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
-            if (InteractionMode == InteractionMode.None || _isPointerCapturedForImage)
+            if (_isPointerCapturedForImage || _isPointerCapturedForCrop)
                 return;
 
             var point = e.GetCurrentPoint(PresentationBorder);
-            var delta = point.Properties.MouseWheelDelta / 120.0;
-            var prevScaledImageSourceRect = _scaledImageSourceQuadrilateral.BoundingBox;
+            var delta = point.Properties.MouseWheelDelta / 120.0; // Each notch of the wheel is 120 units
+            var prevScaledImageSourceRect = _transformedImageQuadrilateral.BoundingBox;
 
-            if (e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Shift))
+            // Adjust the image rotation based on the mouse wheel delta
+            if (AllowManualRotation && e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift))
             {
-                var magnitude = e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control) ? 1 : 5;
+                var magnitude = e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control) ? 1 : RotationRate;
                 ImageRotation -= delta * magnitude;
             }
-            else
+            // Adjust the image scale based on the mouse wheel delta
+            else if (AllowManualScaling && prevScaledImageSourceRect.Contains(point.Position))
             {
                 LinearImageScale += delta;
-                if (prevScaledImageSourceRect.Contains(point.Position))
-                {
-                    var boundingBox = _scaledImageSourceQuadrilateral.BoundingBox;
-                    var widthDelta = boundingBox.Width - prevScaledImageSourceRect.Width;
-                    var heightDelta = boundingBox.Height - prevScaledImageSourceRect.Height;
-                    var pointerOffsetX = point.Position.X - prevScaledImageSourceRect.GetCenterPoint().X;
-                    var pointerOffsetY = point.Position.Y - prevScaledImageSourceRect.GetCenterPoint().Y;
+                var boundingBox = _transformedImageQuadrilateral.BoundingBox;
+                var widthDelta = boundingBox.Width - prevScaledImageSourceRect.Width;
+                var heightDelta = boundingBox.Height - prevScaledImageSourceRect.Height;
+                var pointerOffsetX = point.Position.X - prevScaledImageSourceRect.GetCenterPoint().X;
+                var pointerOffsetY = point.Position.Y - prevScaledImageSourceRect.GetCenterPoint().Y;
 
-                    ImageTranslationX -= (widthDelta * (pointerOffsetX / (prevScaledImageSourceRect.Width / 2))) / 2;
-                    ImageTranslationY -= (heightDelta * (pointerOffsetY / (prevScaledImageSourceRect.Height / 2))) / 2;
-                }
+                ImageTranslationX -= (widthDelta * (pointerOffsetX / (prevScaledImageSourceRect.Width / 2))) / 2;
+                ImageTranslationY -= (heightDelta * (pointerOffsetY / (prevScaledImageSourceRect.Height / 2))) / 2;
             }
         }
         #endregion
@@ -595,8 +702,6 @@ namespace ImageOrganizer.Controls
         {
             if (_currentImageFile is null)
                 return;
-
-            _imageSourceRect = _currentImageFile.BoundingRect;
 
             if (_currentImageFile.Transform == default)
             {
@@ -619,24 +724,29 @@ namespace ImageOrganizer.Controls
 
         private void UpdateTransform()
         {
+            if (_currentImageFile is null)
+                return;
+
+            var imageRect = new Rect(0, 0, _currentImageFile.BoundingRect.Width, _currentImageFile.BoundingRect.Height);
+
             // Create transform matrix
-            var offsetX = (SwapChainPanel.ActualWidth - _imageSourceRect.Width * ImageScale) / 2.0;
-            var offsetY = (SwapChainPanel.ActualHeight - _imageSourceRect.Height * ImageScale) / 2.0;
+            var offsetX = (SwapChainPanel.ActualWidth - _currentImageFile.BoundingRect.Width * ImageScale) / 2.0;
+            var offsetY = (SwapChainPanel.ActualHeight - _currentImageFile.BoundingRect.Height * ImageScale) / 2.0;
             var translation = Matrix3x2.CreateTranslation((float)(ImageTranslationX + offsetX), (float)(ImageTranslationY + offsetY));
-            var rotation = Matrix3x2.CreateRotation((float)(ImageRotation * Math.PI / 180.0), _imageSourceRect.GetCenterPoint().ToVector2());
+            var rotation = Matrix3x2.CreateRotation((float)(ImageRotation * Math.PI / 180.0), imageRect.GetCenterPoint().ToVector2());
             var scale = Matrix3x2.CreateScale((float)ImageScale);
             var transform = rotation * scale * translation;
 
             // Get bounding rectangle for the transformed source image
-            var topLeft = Vector2.Transform(new Vector2((float)_imageSourceRect.Left, (float)_imageSourceRect.Top), transform);
-            var topRight = Vector2.Transform(new Vector2((float)_imageSourceRect.Right, (float)_imageSourceRect.Top), transform);
-            var bottomLeft = Vector2.Transform(new Vector2((float)_imageSourceRect.Left, (float)_imageSourceRect.Bottom), transform);
-            var bottomRight = Vector2.Transform(new Vector2((float)_imageSourceRect.Right, (float)_imageSourceRect.Bottom), transform);
+            var topLeft = Vector2.Transform(new Vector2((float)imageRect.Left, (float)imageRect.Top), transform);
+            var topRight = Vector2.Transform(new Vector2((float)imageRect.Right, (float)imageRect.Top), transform);
+            var bottomLeft = Vector2.Transform(new Vector2((float)imageRect.Left, (float)imageRect.Bottom), transform);
+            var bottomRight = Vector2.Transform(new Vector2((float)imageRect.Right, (float)imageRect.Bottom), transform);
 
             // Adjust crop rectangle so that it stays aligned when the image is translated or scaled
-            var previousImageBounds = _scaledImageSourceQuadrilateral.BoundingBox;
-            _scaledImageSourceQuadrilateral = new Quadrilateral(topLeft, topRight, bottomRight, bottomLeft);
-            AdjustCropRectForImageBoundsChange(previousImageBounds, _scaledImageSourceQuadrilateral.BoundingBox);
+            var previousImageBounds = _transformedImageQuadrilateral.BoundingBox;
+            _transformedImageQuadrilateral = new Quadrilateral(topLeft, topRight, bottomRight, bottomLeft);
+            AdjustCropRectForImageBoundsChange(previousImageBounds, _transformedImageQuadrilateral.BoundingBox);
 
             lock (_transformLock)
             {
@@ -646,7 +756,7 @@ namespace ImageOrganizer.Controls
 
         private void AdjustCropRectForImageBoundsChange(Rect previousImageBounds, Rect currentImageBounds)
         {
-            if (InteractionMode != InteractionMode.Crop ||
+            if (!EnableCropMode ||
                 _cropRect.IsEmpty ||
                 previousImageBounds.IsEmpty ||
                 currentImageBounds.IsEmpty ||
@@ -664,24 +774,65 @@ namespace ImageOrganizer.Controls
             _cropRect = new Rect(left, top, right - left, bottom - top);
         }
 
+        private Rect GetSourceCropRect()
+        {
+            if (_currentImageFile is null || _cropRect.IsEmpty)
+                return Rect.Empty;
+
+            Matrix3x2 transform;
+            lock (_transformLock)
+            {
+                transform = _transform;
+            }
+
+            if (!Matrix3x2.Invert(transform, out var inverseTransform))
+                return Rect.Empty;
+
+            var topLeft = Vector2.Transform(new Vector2((float)_cropRect.Left, (float)_cropRect.Top), inverseTransform);
+            var topRight = Vector2.Transform(new Vector2((float)_cropRect.Right, (float)_cropRect.Top), inverseTransform);
+            var bottomRight = Vector2.Transform(new Vector2((float)_cropRect.Right, (float)_cropRect.Bottom), inverseTransform);
+            var bottomLeft = Vector2.Transform(new Vector2((float)_cropRect.Left, (float)_cropRect.Bottom), inverseTransform);
+
+            var sourceBounds = _currentImageFile.BoundingRect;
+            var left = Math.Clamp(sourceBounds.Left + Math.Min(Math.Min(topLeft.X, topRight.X), Math.Min(bottomRight.X, bottomLeft.X)), sourceBounds.Left, sourceBounds.Right);
+            var top = Math.Clamp(sourceBounds.Top + Math.Min(Math.Min(topLeft.Y, topRight.Y), Math.Min(bottomRight.Y, bottomLeft.Y)), sourceBounds.Top, sourceBounds.Bottom);
+            var right = Math.Clamp(sourceBounds.Left + Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomRight.X, bottomLeft.X)), sourceBounds.Left, sourceBounds.Right);
+            var bottom = Math.Clamp(sourceBounds.Top + Math.Max(Math.Max(topLeft.Y, topRight.Y), Math.Max(bottomRight.Y, bottomLeft.Y)), sourceBounds.Top, sourceBounds.Bottom);
+
+            if (right <= left || bottom <= top)
+                return Rect.Empty;
+
+            return new Rect(left, top, right - left, bottom - top);
+        }
+
         private double GetFitScale()
         {
             if (SwapChainPanel is null ||
-                _imageSourceRect.IsEmpty ||
-                _imageSourceRect.IsZero ||
-                _imageSourceRect.Width <= 0 ||
-                _imageSourceRect.Height <= 0)
+                _currentImageFile is null ||
+                _currentImageFile.BoundingRect.IsEmpty ||
+                _currentImageFile.BoundingRect.IsZero ||
+                _currentImageFile.BoundingRect.Width <= 0 ||
+                _currentImageFile.BoundingRect.Height <= 0)
                 return 1.0;
 
-            return Math.Min(SwapChainPanel.ActualWidth / _imageSourceRect.Width,
-                            SwapChainPanel.ActualHeight / _imageSourceRect.Height);
+            return Math.Min(SwapChainPanel.ActualWidth / _currentImageFile.BoundingRect.Width,
+                            SwapChainPanel.ActualHeight / _currentImageFile.BoundingRect.Height);
         }
 
-        private void SetCursorForCropMode(RectLocations? nearLocation)
+        private void SetCursor(bool isWithinImage, RectLocations cropRectProximity)
         {
-            if (nearLocation.HasValue)
+            // Crop mode is enabled and the pointer is inside the crop rectangle,
+            // so set the cursor to the drag cursor
+            if (EnableCropMode && cropRectProximity == RectLocations.Inside)
             {
-                switch (nearLocation.Value)
+                if (ProtectedCursor != _dragCursor)
+                    ProtectedCursor = _dragCursor;
+            }
+            // Crop mode is enabled and the pointer is near the crop rectangle,
+            // so set the cursor to the appropriate resize cursor
+            else if (EnableCropMode && cropRectProximity != RectLocations.Outside)
+            {
+                switch (cropRectProximity)
                 {
                     case RectLocations.Top:
                     case RectLocations.Bottom:
@@ -705,6 +856,24 @@ namespace ImageOrganizer.Controls
                         break;
                 }
             }
+            // The pointer is within the image bounds,
+            // so set the cursor to the hover cursor if manual translation or scaling is allowed,
+            // otherwise set it to the primary cursor
+            else if (isWithinImage)
+            {
+                if (AllowManualTranslation || AllowManualScaling)
+                {
+                    if (ProtectedCursor != _hoverCursor)
+                        ProtectedCursor = _hoverCursor;
+                }
+                else
+                {
+                    if (ProtectedCursor != _primaryCursor)
+                        ProtectedCursor = _primaryCursor;
+                }
+            }
+            // The pointer is outside the image bounds,
+            // so set the cursor to the primary cursor
             else
             {
                 if (ProtectedCursor != _primaryCursor)

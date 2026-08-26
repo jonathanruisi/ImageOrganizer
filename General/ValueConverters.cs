@@ -8,11 +8,35 @@ using Microsoft.UI.Xaml.Data;
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 
 namespace ImageOrganizer
 {
-    public class FlagMaskConverter : IValueConverter
+    public sealed class DecimalTextConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            var formatString = parameter as string ?? "0.##";
+            return value is IFormattable formattable
+                ? formattable.ToString(formatString, CultureInfo.CurrentCulture)
+                : string.Empty;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            var text = value as string;
+
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var result))
+            {
+                return result;
+            }
+
+            return 0d;
+        }
+    }
+
+    public sealed class FlagMaskConverter : IValueConverter
     {
         public object? Convert(object value, Type targetType, object parameter, string language)
         {
@@ -42,25 +66,7 @@ namespace ImageOrganizer
         }
     }
 
-    public class InteractionModeToBoolConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return value is InteractionMode mode
-                   && mode == Enum.Parse<InteractionMode>((string)parameter);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            if (value is not bool b || parameter is not string s)
-                throw new ArgumentException("Invalid value or parameter");
-            if (!Enum.TryParse<InteractionMode>(s, out var mode))
-                throw new ArgumentException("Invalid parameter");
-            return b ? mode : InteractionMode.None;
-        }
-    }
-
-    public class ImageTransformToVisibilityConverter : IValueConverter
+    public sealed class ImageTransformToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {

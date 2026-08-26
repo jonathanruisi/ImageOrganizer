@@ -131,15 +131,15 @@
                             Orientation="Horizontal"
                             VerticalAlignment="Center"
                             Margin="0,0,20,0">
-                    <!--<TextBlock Margin="0,0,2,0"
+                    <TextBlock Margin="0,0,2,0"
                                Style="{ThemeResource BodyStrongTextBlockStyle}"
-                               Text="{x:Bind ImagePresenter.WindowDpi, Mode=OneWay}"/>-->
+                               Text="{x:Bind ImagePresenter.WindowDpi, Mode=OneWay}"/>
                     <TextBlock Margin="0,0,8,0"
                                Style="{ThemeResource BodyStrongTextBlockStyle}"
                                Text="DPI"/>
-                    <!--<TextBlock Margin="0,0,2,0"
+                    <TextBlock Margin="0,0,2,0"
                                Style="{ThemeResource BodyStrongTextBlockStyle}"
-                               Text="{x:Bind ImagePresenter.WindowRefreshRate, Mode=OneWay}"/>-->
+                               Text="{x:Bind ImagePresenter.WindowRefreshRate, Mode=OneWay}"/>
                     <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}"
                                Text="Hz"/>
                 </StackPanel>
@@ -209,6 +209,7 @@
                                         FontFamily="Segoe UI"
                                         FontSize="24"
                                         FontWeight="Bold"
+                                        Padding="0"
                                         Background="{ThemeResource SolidBackgroundFillColorBaseAltBrush}"/>
 
         <!--Info Bar-->

@@ -8,8 +8,16 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
+    KeyboardAcceleratorPlacementMode="Hidden"
     Loaded="UserControl_Loaded"
     Unloaded="UserControl_Unloaded">
+
+    <UserControl.KeyboardAccelerators>
+        <KeyboardAccelerator Key="Escape" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+        <KeyboardAccelerator Key="Enter" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+        <KeyboardAccelerator Key="F" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+        <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+    </UserControl.KeyboardAccelerators>
 
     <Grid>
         <Grid.RowDefinitions>
@@ -38,31 +46,15 @@
         </Border>
 
         <!-- Upper Toolbar -->
-        <StackPanel Orientation="Horizontal"
+        <StackPanel Grid.Row="0"
+                    Orientation="Horizontal"
                     Padding="3">
-            <ToggleButton x:Name="MouseTransformToggleButton"
+            <ToggleButton x:Name="ToggleButtonEnableCropMode"
                           Width="40"
                           Height="40"
                           Padding="3"
-                          IsChecked="{x:Bind InteractionMode,
-                                             Converter={StaticResource InteractionModeToBoolConverter},
-                                             ConverterParameter=Transform,
-                                             Mode=TwoWay}">
-                <FontIcon FontFamily="Segoe Fluent Icons"
-                          Margin="0"
-                          FontSize="30"
-                          HorizontalAlignment="Center"
-                          VerticalAlignment="Center"
-                          Glyph="&#xE962;"/>
-            </ToggleButton>
-            <ToggleButton x:Name="MouseCropToggleButton"
-                          Width="40"
-                          Height="40"
-                          Padding="3"
-                          IsChecked="{x:Bind InteractionMode,
-                                             Converter={StaticResource InteractionModeToBoolConverter},
-                                             ConverterParameter=Crop,
-                                             Mode=TwoWay}">
+                          Margin="2"
+                          IsChecked="{x:Bind EnableCropMode, Mode=TwoWay}">
                 <FontIcon FontFamily="Segoe Fluent Icons"
                           Margin="0"
                           FontSize="30"
@@ -70,16 +62,131 @@
                           VerticalAlignment="Center"
                           Glyph="&#xE7A8;"/>
             </ToggleButton>
-            
-            <Button x:Name="CropTest"
-                    Width="40"
-                    Height="40"
-                    Padding="3"
-                    Margin="10,0,0,0"
-                    Content="Crop Test"
-                    Click="CropTest_Click"/>
         </StackPanel>
 
         <!-- Lower Toolbar -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    Padding="3">
+            <ToggleButton x:Name="ToggleButtonAllowTranslation"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="2"
+                          IsChecked="{x:Bind AllowManualTranslation, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE7C2;"/>
+            </ToggleButton>
+
+            <TextBlock FontFamily="Arial"
+                       FontWeight="Bold"
+                       FontSize="30"
+                       VerticalAlignment="Center"
+                       Margin="10,0,0,0"
+                       Text="X:"/>
+            <TextBox x:Name="TextBoxTranslationX"
+                     FontFamily="Consolas"
+                     FontSize="24"
+                     FontWeight="Bold"
+                     TextAlignment="Center"
+                     HorizontalTextAlignment="Center"
+                     HorizontalContentAlignment="Center"
+                     VerticalAlignment="Center"
+                     Width="120"
+                     Margin="2"
+                     IsReadOnly="True"
+                     Text="{x:Bind ImageTranslationX,
+                                   Converter={StaticResource DecimalTextConverter},
+                                   ConverterParameter=0.##,
+                                   Mode=OneWay}"/>
+
+            <TextBlock FontFamily="Arial"
+                       FontWeight="Bold"
+                       FontSize="30"
+                       VerticalAlignment="Center"
+                       Margin="10,0,0,0"
+                       Text="Y:"/>
+            <TextBox x:Name="TextBoxTranslationY"
+                     FontFamily="Consolas"
+                     FontSize="24"
+                     FontWeight="Bold"
+                     TextAlignment="Center"
+                     HorizontalTextAlignment="Center"
+                     HorizontalContentAlignment="Center"
+                     VerticalAlignment="Center"
+                     Width="120"
+                     Margin="2"
+                     IsReadOnly="True"
+                     Text="{x:Bind ImageTranslationY,
+                                   Converter={StaticResource DecimalTextConverter},
+                                   ConverterParameter=0.##,
+                                   Mode=OneWay}"/>
+
+            <AppBarSeparator Margin="10,0,0,0"/>
+            <ToggleButton x:Name="ToggleButtonAllowScaling"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="10,0,0,0"
+                          IsChecked="{x:Bind AllowManualScaling, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xECE8;"/>
+            </ToggleButton>
+
+            <TextBox x:Name="TextBoxScale"
+                     FontFamily="Consolas"
+                     FontSize="24"
+                     FontWeight="Bold"
+                     TextAlignment="Center"
+                     HorizontalTextAlignment="Center"
+                     HorizontalContentAlignment="Center"
+                     VerticalAlignment="Center"
+                     Width="120"
+                     Margin="10,0,0,0"
+                     IsReadOnly="True"
+                     Text="{x:Bind ImageScale,
+                                   Converter={StaticResource DecimalTextConverter},
+                                   ConverterParameter=0.##,
+                                   Mode=OneWay}"/>
+
+            <AppBarSeparator Margin="10,0,0,0"/>
+            <ToggleButton x:Name="ToggleButtonAllowRotation"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="10,0,0,0"
+                          IsChecked="{x:Bind AllowManualRotation, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE7AD;"/>
+            </ToggleButton>
+
+            <TextBox x:Name="TextBoxRotation"
+                     FontFamily="Consolas"
+                     FontSize="24"
+                     FontWeight="Bold"
+                     TextAlignment="Center"
+                     HorizontalTextAlignment="Center"
+                     HorizontalContentAlignment="Center"
+                     VerticalAlignment="Center"
+                     Width="120"
+                     Margin="10,0,0,0"
+                     IsReadOnly="True"
+                     Text="{x:Bind ImageRotation,
+                                   Converter={StaticResource DecimalTextConverter},
+                                   ConverterParameter=0.##,
+                                   Mode=OneWay}"/>
+        </StackPanel>
     </Grid>
 </UserControl>
