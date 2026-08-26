@@ -47,7 +47,7 @@ namespace ImageOrganizer.Controls
         private readonly InputCursor _primaryCursor, _secondaryCursor, _hoverCursor, _dragCursor;
         private readonly InputCursor _dragWECursor, _dragNSCursor, _dragNESWCursor, _dragNWSECursor;
         private CanvasBitmap? _bitmap;
-        private ImageFile? _currentImageFile;
+        //private ImageFile? _currentImageFile;
         private int _mediaIndex, _mediaTotal;
         private Matrix3x2 _transform = Matrix3x2.Identity;
         private bool _isPreCaching = false;
@@ -105,7 +105,6 @@ namespace ImageOrganizer.Controls
                 return;
             }
 
-            _currentImageFile = imageFile;
             DisplayCurrentImageFile();
 
             AllowManualTranslation = true;
@@ -225,7 +224,7 @@ namespace ImageOrganizer.Controls
             if (d is not ImagePresenterControl ip)
                 return;
 
-            if (ip.EnableCropMode && ip._currentImageFile != null)
+            if (ip.EnableCropMode && ip.ViewModel.ActiveElement is ImageFile)
             {
                 ip.AllowManualRotation = false;
                 ip.ToggleButtonAllowRotation.IsEnabled = false;
@@ -279,13 +278,13 @@ namespace ImageOrganizer.Controls
             }
             else if (sender.Key == VirtualKey.Enter)
             {
-                if (EnableCropMode && _currentImageFile is not null)
+                if (EnableCropMode && ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
                 {
                     var sourceCropRect = GetSourceCropRect();
                     if (sourceCropRect.IsEmpty)
                         return;
 
-                    await _currentImageFile.CropAsync(sourceCropRect);
+                    await imageFile.CropAsync(sourceCropRect);
                     EnableCropMode = false;
                     DisplayCurrentImageFile();
                     e.Handled = true;
@@ -293,7 +292,7 @@ namespace ImageOrganizer.Controls
             }
             else if (sender.Key == VirtualKey.F)
             {
-                if (_currentImageFile is not null)
+                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
                 {
                     if (sender.Modifiers.HasFlag(VirtualKeyModifiers.Control))
                         ImageScale = 1;
@@ -700,38 +699,38 @@ namespace ImageOrganizer.Controls
         #region Private Methods
         private void DisplayCurrentImageFile()
         {
-            if (_currentImageFile is null)
+            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null)
                 return;
 
-            if (_currentImageFile.Transform == default)
+            if (imageFile.Transform == default)
             {
                 ImageRotation = 0;
                 ScaleImageToFit();
             }
             else
             {
-                RelativeImageScale = _currentImageFile.Transform.Scale;
-                ImageRotation = _currentImageFile.Transform.Rotation;
-                ImageTranslationX = _currentImageFile.Transform.TranslationX;
-                ImageTranslationY = _currentImageFile.Transform.TranslationY;
+                RelativeImageScale = imageFile.Transform.Scale;
+                ImageRotation = imageFile.Transform.Rotation;
+                ImageTranslationX = imageFile.Transform.TranslationX;
+                ImageTranslationY = imageFile.Transform.TranslationY;
             }
 
             lock (_bitmapLock)
             {
-                _bitmap = _currentImageFile.Bitmap;
+                _bitmap = imageFile.Bitmap;
             }
         }
 
         private void UpdateTransform()
         {
-            if (_currentImageFile is null)
+            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null)
                 return;
 
-            var imageRect = new Rect(0, 0, _currentImageFile.BoundingRect.Width, _currentImageFile.BoundingRect.Height);
+            var imageRect = new Rect(0, 0, imageFile.BoundingRect.Width, imageFile.BoundingRect.Height);
 
             // Create transform matrix
-            var offsetX = (SwapChainPanel.ActualWidth - _currentImageFile.BoundingRect.Width * ImageScale) / 2.0;
-            var offsetY = (SwapChainPanel.ActualHeight - _currentImageFile.BoundingRect.Height * ImageScale) / 2.0;
+            var offsetX = (SwapChainPanel.ActualWidth - imageFile.BoundingRect.Width * ImageScale) / 2.0;
+            var offsetY = (SwapChainPanel.ActualHeight - imageFile.BoundingRect.Height * ImageScale) / 2.0;
             var translation = Matrix3x2.CreateTranslation((float)(ImageTranslationX + offsetX), (float)(ImageTranslationY + offsetY));
             var rotation = Matrix3x2.CreateRotation((float)(ImageRotation * Math.PI / 180.0), imageRect.GetCenterPoint().ToVector2());
             var scale = Matrix3x2.CreateScale((float)ImageScale);
@@ -776,7 +775,7 @@ namespace ImageOrganizer.Controls
 
         private Rect GetSourceCropRect()
         {
-            if (_currentImageFile is null || _cropRect.IsEmpty)
+            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null || _cropRect.IsEmpty)
                 return Rect.Empty;
 
             Matrix3x2 transform;
@@ -793,7 +792,7 @@ namespace ImageOrganizer.Controls
             var bottomRight = Vector2.Transform(new Vector2((float)_cropRect.Right, (float)_cropRect.Bottom), inverseTransform);
             var bottomLeft = Vector2.Transform(new Vector2((float)_cropRect.Left, (float)_cropRect.Bottom), inverseTransform);
 
-            var sourceBounds = _currentImageFile.BoundingRect;
+            var sourceBounds = imageFile.BoundingRect;
             var left = Math.Clamp(sourceBounds.Left + Math.Min(Math.Min(topLeft.X, topRight.X), Math.Min(bottomRight.X, bottomLeft.X)), sourceBounds.Left, sourceBounds.Right);
             var top = Math.Clamp(sourceBounds.Top + Math.Min(Math.Min(topLeft.Y, topRight.Y), Math.Min(bottomRight.Y, bottomLeft.Y)), sourceBounds.Top, sourceBounds.Bottom);
             var right = Math.Clamp(sourceBounds.Left + Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomRight.X, bottomLeft.X)), sourceBounds.Left, sourceBounds.Right);
@@ -808,15 +807,15 @@ namespace ImageOrganizer.Controls
         private double GetFitScale()
         {
             if (SwapChainPanel is null ||
-                _currentImageFile is null ||
-                _currentImageFile.BoundingRect.IsEmpty ||
-                _currentImageFile.BoundingRect.IsZero ||
-                _currentImageFile.BoundingRect.Width <= 0 ||
-                _currentImageFile.BoundingRect.Height <= 0)
+                ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null ||
+                imageFile.BoundingRect.IsEmpty ||
+                imageFile.BoundingRect.IsZero ||
+                imageFile.BoundingRect.Width <= 0 ||
+                imageFile.BoundingRect.Height <= 0)
                 return 1.0;
 
-            return Math.Min(SwapChainPanel.ActualWidth / _currentImageFile.BoundingRect.Width,
-                            SwapChainPanel.ActualHeight / _currentImageFile.BoundingRect.Height);
+            return Math.Min(SwapChainPanel.ActualWidth / imageFile.BoundingRect.Width,
+                            SwapChainPanel.ActualHeight / imageFile.BoundingRect.Height);
         }
 
         private void SetCursor(bool isWithinImage, RectLocations cropRectProximity)
