@@ -140,7 +140,7 @@ namespace ImageOrganizer.Controls
 
         public void ScaleImageToFit()
         {
-            ImageScale = GetFitScaleForDisplayedImageBounds();
+            ImageScale = GetFitScale();
             ImageTranslationX = 0;
             ImageTranslationY = 0;
         }
@@ -817,22 +817,6 @@ namespace ImageOrganizer.Controls
 
             return Math.Min(SwapChainPanel.ActualWidth / _currentImageFile.BoundingRect.Width,
                             SwapChainPanel.ActualHeight / _currentImageFile.BoundingRect.Height);
-        }
-
-        private double GetFitScaleForDisplayedImageBounds()
-        {
-            if (ImageRotation == 0 || ImageScale <= 0)
-                return GetFitScale();
-
-            var boundingBox = _transformedImageQuadrilateral.BoundingBox;
-            if (boundingBox.IsEmpty ||
-                boundingBox.IsZero ||
-                boundingBox.Width <= 0 ||
-                boundingBox.Height <= 0)
-                return GetFitScale();
-
-            return ImageScale * Math.Min(SwapChainPanel.ActualWidth / boundingBox.Width,
-                                         SwapChainPanel.ActualHeight / boundingBox.Height);
         }
 
         private void SetCursor(bool isWithinImage, RectLocations cropRectProximity)
