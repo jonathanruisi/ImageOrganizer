@@ -302,6 +302,15 @@ namespace ImageOrganizer.Controls
                     e.Handled = true;
                 }
             }
+            else if (sender.Key == VirtualKey.L)
+            {
+                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                {
+                    LockTransform = !LockTransform;
+
+                    e.Handled = true;
+                }
+            }
         }
         #endregion
 

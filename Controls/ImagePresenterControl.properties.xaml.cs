@@ -162,6 +162,18 @@ namespace ImageOrganizer.Controls
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(false, OnEnableCropModeChanged));
 
+        public bool LockTransform
+        {
+            get => (bool)GetValue(LockTransformProperty);
+            set => SetValue(LockTransformProperty, value);
+        }
+
+        public static readonly DependencyProperty LockTransformProperty =
+            DependencyProperty.Register(nameof(LockTransform),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false));
+
         public double SnapDistance
         {
             get => (double)GetValue(SnapDistanceProperty);
@@ -221,5 +233,29 @@ namespace ImageOrganizer.Controls
                                         typeof(int),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(25));
+
+        public Visibility UpperToolbarVisibility
+        {
+            get => (Visibility)GetValue(UpperToolbarVisibilityProperty);
+            set => SetValue(UpperToolbarVisibilityProperty, value);
+        }
+
+        public static readonly DependencyProperty UpperToolbarVisibilityProperty =
+            DependencyProperty.Register(nameof(UpperToolbarVisibility),
+                                        typeof(Visibility),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(Visibility.Visible));
+
+        public Visibility LowerToolbarVisibility
+        {
+            get => (Visibility)GetValue(LowerToolbarVisibilityProperty);
+            set => SetValue(LowerToolbarVisibilityProperty, value);
+        }
+
+        public static readonly DependencyProperty LowerToolbarVisibilityProperty =
+            DependencyProperty.Register(nameof(LowerToolbarVisibility),
+                                        typeof(Visibility),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(Visibility.Visible));
     }
 }

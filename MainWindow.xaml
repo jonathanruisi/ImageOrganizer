@@ -16,7 +16,12 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+          KeyboardAcceleratorPlacementMode="Hidden">
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="F11" Invoked="KeyboardAcceleratorInvoked"/>
+        </Grid.KeyboardAccelerators>
+        
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -220,7 +225,8 @@
                  IsIconVisible="True"/>
 
         <!--Content Sizers-->
-        <toolkit:ContentSizer Grid.Row="1"
+        <toolkit:ContentSizer x:Name="SystemBrowserSizer"
+                              Grid.Row="1"
                               Grid.Column="1"
                               TargetControl="{x:Bind SystemBrowser}"
                               Background="{ThemeResource ControlSolidFillColorDefaultBrush}"/>

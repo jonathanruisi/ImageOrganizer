@@ -48,7 +48,8 @@
         <!-- Upper Toolbar -->
         <StackPanel Grid.Row="0"
                     Orientation="Horizontal"
-                    Padding="3">
+                    Padding="3"
+                    Visibility="{x:Bind UpperToolbarVisibility, Mode=TwoWay}">
             <ToggleButton x:Name="ToggleButtonEnableCropMode"
                           Width="40"
                           Height="40"
@@ -62,12 +63,27 @@
                           VerticalAlignment="Center"
                           Glyph="&#xE7A8;"/>
             </ToggleButton>
+
+            <ToggleButton x:Name="ToggleButtonLockTransform"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="10,2,2,2"
+                          IsChecked="{x:Bind LockTransform, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xEE3F;"/>
+            </ToggleButton>
         </StackPanel>
 
         <!-- Lower Toolbar -->
         <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
-                    Padding="3">
+                    Padding="3"
+                    Visibility="{x:Bind LowerToolbarVisibility, Mode=TwoWay}">
             <ToggleButton x:Name="ToggleButtonAllowTranslation"
                           Width="40"
                           Height="40"

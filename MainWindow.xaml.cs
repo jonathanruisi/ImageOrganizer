@@ -198,6 +198,29 @@ namespace ImageOrganizer
             }
         }
 
+        public void KeyboardAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
+        {
+            e.Handled = true;
+            if (PresenterKind != AppWindowPresenterKind.FullScreen)
+            {
+                SwitchPresenter(AppWindowPresenterKind.FullScreen);
+                PresenterKind = AppWindowPresenterKind.FullScreen;
+                SystemBrowser.Visibility = Visibility.Collapsed;
+                SystemBrowserSizer.Visibility = Visibility.Collapsed;
+                ImagePresenter.UpperToolbarVisibility = Visibility.Collapsed;
+                ImagePresenter.LowerToolbarVisibility = Visibility.Collapsed;
+            }
+            else
+            {
+                SwitchPresenter(AppWindowPresenterKind.Default);
+                PresenterKind = AppWindowPresenterKind.Default;
+                SystemBrowser.Visibility = Visibility.Visible;
+                SystemBrowserSizer.Visibility = Visibility.Visible;
+                ImagePresenter.UpperToolbarVisibility = Visibility.Visible;
+                ImagePresenter.LowerToolbarVisibility = Visibility.Visible;
+            }
+        }
+
         private void SwitchPresenter(AppWindowPresenterKind presenterKind)
         {
             if (AppWindow is null)
