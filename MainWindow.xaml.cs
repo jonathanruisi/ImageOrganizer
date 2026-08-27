@@ -237,21 +237,21 @@ namespace ImageOrganizer
             var messenger = services.GetService<IMessenger>()
                 ?? throw new InvalidOperationException("IMessenger service is not registered");
 
-            messenger.Register<SetInfoBarMessage>(this, (r, m) =>
+            messenger.Register<MainWindow, SetInfoBarMessage>(this, (r, m) =>
             {
-                MainInfoBar.Title = m.Title;
-                MainInfoBar.Message = m.Message;
-                MainInfoBar.Severity = m.Severity;
-                MainInfoBar.IsClosable = m.IsCloseable;
-                MainInfoBar.IsOpen = true;
+                r.MainInfoBar.Title = m.Title;
+                r.MainInfoBar.Message = m.Message;
+                r.MainInfoBar.Severity = m.Severity;
+                r.MainInfoBar.IsClosable = m.IsCloseable;
+                r.MainInfoBar.IsOpen = true;
             });
 
-            messenger.Register<ToggleFullscreenMessage>(this, (r, m) =>
+            messenger.Register<MainWindow, ToggleFullscreenMessage>(this, (r, m) =>
             {
-                if (((MainWindow)r).PresenterKind != AppWindowPresenterKind.FullScreen)
-                    ((MainWindow)r).SwitchPresenter(AppWindowPresenterKind.FullScreen);
+                if (r.PresenterKind != AppWindowPresenterKind.FullScreen)
+                    r.SwitchPresenter(AppWindowPresenterKind.FullScreen);
                 else
-                    ((MainWindow)r).SwitchPresenter(AppWindowPresenterKind.Default);
+                    r.SwitchPresenter(AppWindowPresenterKind.Default);
             });
         }
         #endregion

@@ -9,6 +9,8 @@ using JLR.Utility.WinUI.ViewModel;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Brushes;
+using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -44,10 +46,9 @@ namespace ImageOrganizer.Controls
         private readonly Lock _transformLock = new();
         private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _renderTimer;
         private readonly LruBitmapCache _bitmapCache;
-        private readonly InputCursor _primaryCursor, _secondaryCursor, _hoverCursor, _dragCursor;
+        private readonly InputCursor _primaryCursor, _hoverCursor, _dragCursor;
         private readonly InputCursor _dragWECursor, _dragNSCursor, _dragNESWCursor, _dragNWSECursor;
         private CanvasBitmap? _bitmap;
-        //private ImageFile? _currentImageFile;
         private int _mediaIndex, _mediaTotal;
         private Matrix3x2 _transform = Matrix3x2.Identity;
         private bool _isPreCaching = false;
@@ -58,6 +59,7 @@ namespace ImageOrganizer.Controls
         private bool _isPointerCapturedForCrop = false;
         private Point _previousPointerPosition = new(0, 0);
         private RectLocations _capturedCropRectLocation = RectLocations.Outside;
+        private ICanvasBrush? _alignmentGridBrush, _cropRectangleBrush;
         #endregion
 
         #region Properties
@@ -72,7 +74,6 @@ namespace ImageOrganizer.Controls
 
             // Initialize cursors
             _primaryCursor = InputSystemCursor.Create(InputSystemCursorShape.Hand);
-            _secondaryCursor = InputSystemCursor.Create(InputSystemCursorShape.UpArrow);
             _hoverCursor = InputSystemCursor.Create(InputSystemCursorShape.Cross);
             _dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
             _dragWECursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
@@ -94,18 +95,34 @@ namespace ImageOrganizer.Controls
         #endregion
 
         #region Public Methods
-        public async Task DisplayImageFileAsync(ImageFile imageFile)
+        public void DisplayCurrentImageFile()
         {
-            //Debug.WriteLine("Load Image");
-            var bitmap = await _bitmapCache.GetOrLoadImageAsync(SwapChainPanel.SwapChain.Device, imageFile);
-
-            if (bitmap is null)
+            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null)
             {
                 ClearImage();
                 return;
             }
 
-            DisplayCurrentImageFile();
+            if (!LockTransform)
+            {
+                if (imageFile.Transform == default)
+                {
+                    ImageRotation = 0;
+                    ScaleImageToFit();
+                }
+                else
+                {
+                    RelativeImageScale = imageFile.Transform.Scale;
+                    ImageRotation = imageFile.Transform.Rotation;
+                    ImageTranslationX = imageFile.Transform.TranslationX;
+                    ImageTranslationY = imageFile.Transform.TranslationY;
+                }
+            }
+
+            lock (_bitmapLock)
+            {
+                _bitmap = imageFile.Bitmap;
+            }
 
             AllowManualTranslation = true;
             AllowManualScaling = true;
@@ -115,7 +132,6 @@ namespace ImageOrganizer.Controls
 
         public void ClearImage()
         {
-            //Debug.WriteLine("Clear Image");
             lock (_bitmapLock)
             {
                 _bitmap = null;
@@ -211,6 +227,25 @@ namespace ImageOrganizer.Controls
                 ip.UpdateTransform();
         }
 
+        private static void OnCanvasBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip || ip.SwapChainPanel.SwapChain is null)
+                return;
+
+            if (e.Property == AlignmentGridBrushProperty)
+            {
+                ip._alignmentGridBrush?.Dispose();
+                ip._alignmentGridBrush = null;
+                ip._alignmentGridBrush = ip.AlignmentGridBrush.CreateCanvasBrush(ip.SwapChainPanel.SwapChain.Device);
+            }
+            else if (e.Property == CropRectangleBrushProperty)
+            {
+                ip._cropRectangleBrush?.Dispose();
+                ip._cropRectangleBrush = null;
+                ip._cropRectangleBrush = ip.CropRectangleBrush.CreateCanvasBrush(ip.SwapChainPanel.SwapChain.Device);
+            }
+        }
+
         private static void OnCacheCapacityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is not ImagePresenterControl ip)
@@ -238,6 +273,12 @@ namespace ImageOrganizer.Controls
                 ip._cropRect = Rect.Empty;
             }
         }
+
+        private static void OnOverlayPreviousImageChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+        }
         #endregion
 
         #region Event Handlers (UserControl)
@@ -245,6 +286,14 @@ namespace ImageOrganizer.Controls
         {
             EnsureSwapChainDpi();
             EnsureRefreshRate();
+
+            _alignmentGridBrush?.Dispose();
+            _alignmentGridBrush = null;
+            _alignmentGridBrush = AlignmentGridBrush.CreateCanvasBrush(SwapChainPanel.SwapChain.Device);
+
+            _cropRectangleBrush?.Dispose();
+            _cropRectangleBrush = null;
+            _cropRectangleBrush = CropRectangleBrush.CreateCanvasBrush(SwapChainPanel.SwapChain.Device);
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
@@ -308,6 +357,22 @@ namespace ImageOrganizer.Controls
                 {
                     LockTransform = !LockTransform;
 
+                    e.Handled = true;
+                }
+            }
+            else if (sender.Key == VirtualKey.O)
+            {
+                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                {
+                    OverlayPreviousImage = !OverlayPreviousImage;
+                    e.Handled = true;
+                }
+            }
+            else if (sender.Key == VirtualKey.G)
+            {
+                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                {
+                    ShowAlignmentGrid = !ShowAlignmentGrid;
                     e.Handled = true;
                 }
             }
@@ -408,7 +473,18 @@ namespace ImageOrganizer.Controls
                 }
 
                 // Draw the crop rectangle border
-                ds.DrawRectangle(cropRect, Colors.White, 5f);
+                ds.DrawRectangle(cropRect, _cropRectangleBrush, (float)CropRectangleThickness);
+            }
+
+            // Draw the alignment grid if enabled
+            if (ShowAlignmentGrid)
+            {
+                var panelWidth = SwapChainPanel.ActualWidth;
+                var panelHeight = SwapChainPanel.ActualHeight;
+                ds.DrawLine((float)(panelWidth / 3), 0, (float)(panelWidth / 3), (float)panelHeight, _alignmentGridBrush, (float)AlignmentGridThickness);
+                ds.DrawLine((float)(2 * panelWidth / 3), 0, (float)(2 * panelWidth / 3), (float)panelHeight, _alignmentGridBrush, (float)AlignmentGridThickness);
+                ds.DrawLine(0, (float)(panelHeight / 3), (float)panelWidth, (float)(panelHeight / 3), _alignmentGridBrush, (float)AlignmentGridThickness);
+                ds.DrawLine(0, (float)(2 * panelHeight / 3), (float)panelWidth, (float)(2 * panelHeight / 3), _alignmentGridBrush, (float)AlignmentGridThickness);
             }
 
             SwapChainPanel.SwapChain.Present();
@@ -418,7 +494,6 @@ namespace ImageOrganizer.Controls
         #region Event Handlers (SwapChain)
         private void SwapChainPanel_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            //Debug.WriteLine("Size Changed");
             SwapChainPanel?.SwapChain?.ResizeBuffers(e.NewSize);
 
             // Re-apply relative scale so it stays consistent with the new panel size
@@ -706,30 +781,9 @@ namespace ImageOrganizer.Controls
         #endregion
 
         #region Private Methods
-        private void DisplayCurrentImageFile()
-        {
-            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null)
-                return;
-
-            if (imageFile.Transform == default)
-            {
-                ImageRotation = 0;
-                ScaleImageToFit();
-            }
-            else
-            {
-                RelativeImageScale = imageFile.Transform.Scale;
-                ImageRotation = imageFile.Transform.Rotation;
-                ImageTranslationX = imageFile.Transform.TranslationX;
-                ImageTranslationY = imageFile.Transform.TranslationY;
-            }
-
-            lock (_bitmapLock)
-            {
-                _bitmap = imageFile.Bitmap;
-            }
-        }
-
+        /// <summary>
+        /// Updates the transformation matrix based on the current image scale, rotation, and translation values
+        /// </summary>
         private void UpdateTransform()
         {
             if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null)
@@ -762,6 +816,11 @@ namespace ImageOrganizer.Controls
             }
         }
 
+        /// <summary>
+        /// Adjusts the crop rectangle to maintain its relative position and size when the image bounds change due to translation or scaling
+        /// </summary>
+        /// <param name="previousImageBounds">The bounding rectangle of the image before the transformation</param>
+        /// <param name="currentImageBounds">The bounding rectangle of the image after the transformation</param>
         private void AdjustCropRectForImageBoundsChange(Rect previousImageBounds, Rect currentImageBounds)
         {
             if (!EnableCropMode ||
@@ -782,6 +841,12 @@ namespace ImageOrganizer.Controls
             _cropRect = new Rect(left, top, right - left, bottom - top);
         }
 
+        /// <summary>
+        /// Calculates the crop rectangle in the source image's coordinate space
+        /// </summary>
+        /// <returns>
+        /// The crop rectangle in the source image's coordinate space
+        /// </returns>
         private Rect GetSourceCropRect()
         {
             if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null || _cropRect.IsEmpty)
@@ -813,6 +878,12 @@ namespace ImageOrganizer.Controls
             return new Rect(left, top, right - left, bottom - top);
         }
 
+        /// <summary>
+        /// Calculates the scale factor needed to fit the image within the SwapChainPanel while maintaining its aspect ratio
+        /// </summary>
+        /// <returns>
+        /// The scale factor needed to fit the image within the SwapChainPanel
+        /// </returns>
         private double GetFitScale()
         {
             if (SwapChainPanel is null ||
@@ -898,7 +969,6 @@ namespace ImageOrganizer.Controls
 
             if (SwapChainPanel is not null && (SwapChainPanel.SwapChain is null || Math.Abs(SwapChainPanel.SwapChain.Dpi - WindowDpi) > 0.1))
             {
-                //Debug.WriteLine($"DPI CHANGED ({(SwapChainPanel.SwapChain == null ? "XX" : SwapChainPanel.SwapChain.Dpi):0} --> {WindowDpi:0})");
                 CanvasSwapChain? newSwapChain = null;
                 CanvasSwapChain? oldSwapChain = SwapChainPanel.SwapChain;
 
@@ -947,46 +1017,53 @@ namespace ImageOrganizer.Controls
             var messenger = services.GetService<IMessenger>()
                 ?? throw new InvalidOperationException("IMessenger service is not registered");
 
-            messenger.Register<ValueChangedMessage<(int dpiX, int dpiY)>>(this, (r, m) =>
+            messenger.Register<ImagePresenterControl, ValueChangedMessage<(int dpiX, int dpiY)>>(this, (r, m) =>
             {
-                WindowDpi = m.Value.dpiX;
+                r.WindowDpi = m.Value.dpiX;
             });
 
-            messenger.Register<ValueChangedMessage<double?>>(this, (r, m) =>
+            messenger.Register<ImagePresenterControl, ValueChangedMessage<double?>>(this, (r, m) =>
             {
                 if (m.Value is null)
                     return;
 
-                WindowRefreshRate = (double)m.Value;
+                r.WindowRefreshRate = (double)m.Value;
             });
 
-            messenger.Register<PropertyChangedMessage<ViewModelElement>>(this, async (r, m) =>
+            messenger.Register<ImagePresenterControl, PropertyChangedMessage<ViewModelElement>>(this, static async (r, m) =>
             {
-                if (m.Sender != ViewModel || m.PropertyName != nameof(ViewModel.ActiveElement))
+                if (m.Sender != r.ViewModel || m.PropertyName != nameof(ViewModel.ActiveElement))
                     return;
 
                 if (m.NewValue is null)
                 {
-                    _mediaIndex = 0;
-                    _mediaTotal = 0;
-                    ((ImagePresenterControl)r).ClearImage();
+                    r._mediaIndex = 0;
+                    r._mediaTotal = 0;
+                    r.ClearImage();
                 }
                 else if (m.NewValue is ImageFile imageFile)
                 {
-                    await ((ImagePresenterControl)r).DisplayImageFileAsync(imageFile);
+                    var isAvailable = await r._bitmapCache.LoadImageAsync(r.SwapChainPanel.SwapChain.Device, imageFile);
+                    if (isAvailable)
+                        r.DisplayCurrentImageFile();
+                    else
+                    {
+                        r.ClearImage();
+                        return;
+                    }
 
-                    _mediaIndex = imageFile.Parent.Children.IndexOf(imageFile);
-                    _mediaTotal = imageFile.Parent.Children.Count;
+                    r._mediaIndex = imageFile.Parent.Children.IndexOf(imageFile);
+                    r._mediaTotal = imageFile.Parent.Children.Count;
 
                     var prevIndex = 0;
                     if (m.OldValue is ImageFile prevImage && prevImage.Parent == imageFile.Parent)
                         prevIndex = prevImage.Parent.Children.IndexOf(prevImage);
 
-                    if (!_isPreCaching && (prevIndex == 0 || prevIndex < _mediaIndex))
+                    if (!r._isPreCaching && (prevIndex == 0 || prevIndex < r._mediaIndex))
                     {
                         var proceed = false;
-                        var startIndex = _mediaIndex + 1;
-                        for (var i = startIndex; i < startIndex + AutoCacheThreshold && i < _mediaTotal; i++)
+                        var startIndex = r._mediaIndex + 1;
+                        for (var i = startIndex; i < startIndex + r.AutoCacheThreshold && i < r._mediaTotal; i++)
                         {
                             if (imageFile.Parent.Children[i] is ImageFile nextImage && !nextImage.IsCached)
                             {
@@ -998,31 +1075,31 @@ namespace ImageOrganizer.Controls
 
                         if (proceed)
                         {
-                            _isPreCaching = true;
-                            for (var i = startIndex; i < startIndex + AutoCacheThreshold && i < _mediaTotal; i++)
+                            r._isPreCaching = true;
+                            for (var i = startIndex; i < startIndex + r.AutoCacheThreshold && i < r._mediaTotal; i++)
                             {
                                 if (imageFile.Parent.Children[i] is ImageFile nextImage && !nextImage.IsCached)
                                 {
-                                    await _bitmapCache.GetOrLoadImageAsync(SwapChainPanel.SwapChain.Device, nextImage);
+                                    await r._bitmapCache.LoadImageAsync(r.SwapChainPanel.SwapChain.Device, nextImage);
                                 }
                             }
-                            _isPreCaching = false;
+                            r._isPreCaching = false;
                         }
                     }
                 }
             });
 
-            messenger.Register<RemoveImageFromCacheMessage>(this, (r, m) =>
+            messenger.Register<ImagePresenterControl, RemoveImageFromCacheMessage>(this, (r, m) =>
             {
-                ((ImagePresenterControl)r)._bitmapCache.RemoveImage(m.Path);
+                r._bitmapCache.RemoveImage(m.Path);
             });
 
-            messenger.Register<ImageTransformRequestMessage>(this, (r, m) =>
+            messenger.Register<ImagePresenterControl, ImageTransformRequestMessage>(this, (r, m) =>
             {
-                var translationX = ((ImagePresenterControl)r).ImageTranslationX;
-                var translationY = ((ImagePresenterControl)r).ImageTranslationY;
-                var rotation = ((ImagePresenterControl)r).ImageRotation;
-                var scale = ((ImagePresenterControl)r).RelativeImageScale;
+                var translationX = r.ImageTranslationX;
+                var translationY = r.ImageTranslationY;
+                var rotation = r.ImageRotation;
+                var scale = r.RelativeImageScale;
                 m.Reply((translationX, translationY, rotation, scale));
             });
         }

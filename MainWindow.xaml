@@ -215,7 +215,9 @@
                                         FontSize="24"
                                         FontWeight="Bold"
                                         Padding="0"
-                                        Background="{ThemeResource SolidBackgroundFillColorBaseAltBrush}"/>
+                                        Background="{ThemeResource SolidBackgroundFillColorBaseAltBrush}"
+                                        AlignmentGridBrush="HotPink"
+                                        CropRectangleBrush="White"/>
 
         <!--Info Bar-->
         <InfoBar x:Name="MainInfoBar"

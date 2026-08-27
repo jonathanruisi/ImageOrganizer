@@ -17,6 +17,9 @@
         <KeyboardAccelerator Key="Enter" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
         <KeyboardAccelerator Key="F" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
         <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+        <KeyboardAccelerator Key="L" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+        <KeyboardAccelerator Key="G" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+        <KeyboardAccelerator Key="O" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
     </UserControl.KeyboardAccelerators>
 
     <Grid>
@@ -54,7 +57,7 @@
                           Width="40"
                           Height="40"
                           Padding="3"
-                          Margin="2"
+                          Margin="2,2,5,2"
                           IsChecked="{x:Bind EnableCropMode, Mode=TwoWay}">
                 <FontIcon FontFamily="Segoe Fluent Icons"
                           Margin="0"
@@ -68,7 +71,7 @@
                           Width="40"
                           Height="40"
                           Padding="3"
-                          Margin="10,2,2,2"
+                          Margin="5,2"
                           IsChecked="{x:Bind LockTransform, Mode=TwoWay}">
                 <FontIcon FontFamily="Segoe Fluent Icons"
                           Margin="0"
@@ -76,6 +79,35 @@
                           HorizontalAlignment="Center"
                           VerticalAlignment="Center"
                           Glyph="&#xEE3F;"/>
+            </ToggleButton>
+
+            <ToggleButton x:Name="ToggleButtonOverlayPreviousImage"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="5,2"
+                          IsChecked="{x:Bind OverlayPreviousImage, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE81E;"/>
+            </ToggleButton>
+
+            <AppBarSeparator/>
+            <ToggleButton x:Name="ToggleButtonShowAlignmentGrid"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="5,2"
+                          IsChecked="{x:Bind ShowAlignmentGrid, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xF232;"/>
             </ToggleButton>
         </StackPanel>
 

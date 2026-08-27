@@ -5,6 +5,7 @@ using Microsoft.Graphics.Canvas;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ImageOrganizer
@@ -14,6 +15,7 @@ namespace ImageOrganizer
         #region Fields
         private readonly Dictionary<string, LinkedListNode<ImageFile>> _cacheMap = [];
         private readonly LinkedList<ImageFile> _lruList = new();
+        private readonly SemaphoreSlim _loadGate = new(1, 1);
         private int _capacity;
         private float _dpi;
         private bool disposed;
@@ -56,32 +58,36 @@ namespace ImageOrganizer
         #endregion
 
         #region Public Methods
-        public async Task<CanvasBitmap?> GetOrLoadImageAsync(ICanvasResourceCreator resourceCreator, ImageFile imageFile)
+        public async Task<bool> LoadImageAsync(ICanvasResourceCreator resourceCreator, ImageFile imageFile)
         {
-            if (_cacheMap.TryGetValue(imageFile.Path, out var node))
+            await _loadGate.WaitAsync();
+            try
             {
-                _lruList.Remove(node);
-                _lruList.AddFirst(node);
-                if (node.Value.Bitmap is not null)
+                if (_cacheMap.TryGetValue(imageFile.Path, out var node))
                 {
-                    //Debug.WriteLine($"RETRIEVED {imageFile.Name}");
-                    return node.Value.Bitmap;
+                    _lruList.Remove(node);
+                    _lruList.AddFirst(node);
+                    if (node.Value.Bitmap is not null)
+                        return true;
                 }
+
+                var cacheResult = await imageFile.Render(resourceCreator, _dpi);
+                if (cacheResult == false)
+                    return false;
+
+                var newNode = new LinkedListNode<ImageFile>(imageFile);
+                _lruList.AddFirst(newNode);
+                _cacheMap[imageFile.Path] = newNode;
+
+                if (_cacheMap.Count > _capacity)
+                    RemoveLeastRecentlyUsed();
+
+                return true;
             }
-
-            var cacheResult = await imageFile.Render(resourceCreator, _dpi);
-            //Debug.WriteLine($"{(cacheResult ? "CACHED" : "FAILED TO CACHE")} {imageFile.Name}");
-            if (cacheResult == false)
-                return null;
-
-            var newNode = new LinkedListNode<ImageFile>(imageFile);
-            _lruList.AddFirst(newNode);
-            _cacheMap[imageFile.Path] = newNode;
-
-            if (_cacheMap.Count > _capacity)
-                RemoveLeastRecentlyUsed();
-
-            return imageFile.Bitmap;
+            finally
+            {
+                _loadGate.Release();
+            }
         }
 
         public void RemoveImage(string path)

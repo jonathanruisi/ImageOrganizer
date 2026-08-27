@@ -117,16 +117,16 @@ namespace ImageOrganizer.Controls
             var messenger = services.GetService<IMessenger>()
                 ?? throw new InvalidOperationException("IMessenger service is not registered");
 
-            messenger.Register<PropertyChangedMessage<ViewModelElement>>(this, (r, m) =>
+            messenger.Register<SystemBrowserControl, PropertyChangedMessage<ViewModelElement>>(this, (r, m) =>
             {
                 if (m.Sender != ViewModel || m.PropertyName != nameof(ViewModel.ActiveElement))
                     return;
 
-                if (((SystemBrowserControl)r).SystemBrowserListView.SelectedItems.Count == 1)
-                    ((SystemBrowserControl)r).SystemBrowserListView.SelectedItem = m.NewValue;
+                if (r.SystemBrowserListView.SelectedItems.Count == 1)
+                    r.SystemBrowserListView.SelectedItem = m.NewValue;
             });
 
-            messenger.Register<PropertyChangedMessage<ViewModelNode>>(this, async (r, m) =>
+            messenger.Register<SystemBrowserControl, PropertyChangedMessage<ViewModelNode>>(this, async (r, m) =>
             {
                 if (m.Sender != ViewModel || m.PropertyName != nameof(ViewModel.SystemBrowserFolder))
                     return;
@@ -141,7 +141,7 @@ namespace ImageOrganizer.Controls
                 }
             });
 
-            messenger.Register<ViewModelFolderRemovedMessage>(this, (r, m) =>
+            messenger.Register<SystemBrowserControl, ViewModelFolderRemovedMessage>(this, (r, m) =>
             {
                 if (m.Folder == ViewModel.SystemBrowserFolder)
                 {

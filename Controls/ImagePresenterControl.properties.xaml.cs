@@ -1,33 +1,11 @@
 ﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace ImageOrganizer.Controls
 {
     public sealed partial class ImagePresenterControl
     {
-        public double WindowDpi
-        {
-            get => (double)GetValue(WindowDpiProperty);
-            set => SetValue(WindowDpiProperty, value);
-        }
-
-        public static readonly DependencyProperty WindowDpiProperty =
-            DependencyProperty.Register(nameof(WindowDpi),
-                                        typeof(double),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(0.0, OnWindowDpiChanged));
-
-        public double WindowRefreshRate
-        {
-            get => (double)GetValue(WindowRefreshRateProperty);
-            set => SetValue(WindowRefreshRateProperty, value);
-        }
-
-        public static readonly DependencyProperty WindowRefreshRateProperty =
-            DependencyProperty.Register(nameof(WindowRefreshRate),
-                                        typeof(double),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(0.0, OnWindowRefreshRateChanged));
-
+        #region Transform Properties
         /// <summary>
         /// Gets or sets the horizontal translation offset applied to the image, in device-independent units.
         /// </summary>
@@ -113,7 +91,9 @@ namespace ImageOrganizer.Controls
                                         typeof(double),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(1.0, OnImageTransformChanged));
+        #endregion
 
+        #region Pointer Manipulation Properties
         public bool AllowManualTranslation
         {
             get => (bool)GetValue(AllowManualTranslationProperty);
@@ -150,18 +130,6 @@ namespace ImageOrganizer.Controls
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(false));
 
-        public bool EnableCropMode
-        {
-            get => (bool)GetValue(EnableCropModeProperty);
-            set => SetValue(EnableCropModeProperty, value);
-        }
-
-        public static readonly DependencyProperty EnableCropModeProperty =
-            DependencyProperty.Register(nameof(EnableCropMode),
-                                        typeof(bool),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(false, OnEnableCropModeChanged));
-
         public bool LockTransform
         {
             get => (bool)GetValue(LockTransformProperty);
@@ -197,6 +165,94 @@ namespace ImageOrganizer.Controls
                                         typeof(int),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(5));
+        #endregion
+
+        #region Tool Properties
+        public bool EnableCropMode
+        {
+            get => (bool)GetValue(EnableCropModeProperty);
+            set => SetValue(EnableCropModeProperty, value);
+        }
+
+        public static readonly DependencyProperty EnableCropModeProperty =
+            DependencyProperty.Register(nameof(EnableCropMode),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnEnableCropModeChanged));
+
+        public bool OverlayPreviousImage
+        {
+            get => (bool)GetValue(OverlayPreviousImageProperty);
+            set => SetValue(OverlayPreviousImageProperty, value);
+        }
+
+        public static readonly DependencyProperty OverlayPreviousImageProperty =
+            DependencyProperty.Register(nameof(OverlayPreviousImage),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnOverlayPreviousImageChanged));
+        #endregion
+
+        #region Visual Properties
+        public bool ShowAlignmentGrid
+        {
+            get => (bool)GetValue(ShowAlignmentGridProperty);
+            set => SetValue(ShowAlignmentGridProperty, value);
+        }
+
+        public static readonly DependencyProperty ShowAlignmentGridProperty =
+            DependencyProperty.Register(nameof(ShowAlignmentGrid),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false));
+
+        public Brush AlignmentGridBrush
+        {
+            get => (Brush)GetValue(AlignmentGridBrushProperty);
+            set => SetValue(AlignmentGridBrushProperty, value);
+        }
+
+        public static readonly DependencyProperty AlignmentGridBrushProperty =
+            DependencyProperty.Register(nameof(AlignmentGridBrush),
+                                        typeof(Brush),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(null, OnCanvasBrushChanged));
+
+        public double AlignmentGridThickness
+        {
+            get => (double)GetValue(AlignmentGridThicknessProperty);
+            set => SetValue(AlignmentGridThicknessProperty, value);
+        }
+
+        public static readonly DependencyProperty AlignmentGridThicknessProperty =
+            DependencyProperty.Register(nameof(AlignmentGridThickness),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(1.0));
+
+        public Brush CropRectangleBrush
+        {
+            get => (Brush)GetValue(CropRectangleBrushProperty);
+            set => SetValue(CropRectangleBrushProperty, value);
+        }
+
+        public static readonly DependencyProperty CropRectangleBrushProperty =
+            DependencyProperty.Register(nameof(CropRectangleBrush),
+                                        typeof(Brush),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(null, OnCanvasBrushChanged));
+
+        public double CropRectangleThickness
+        {
+            get => (double)GetValue(CropRectangleThicknessProperty);
+            set => SetValue(CropRectangleThicknessProperty, value);
+        }
+
+        public static readonly DependencyProperty CropRectangleThicknessProperty =
+            DependencyProperty.Register(nameof(CropRectangleThickness),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(5.0));
 
         public float MaskOpacity
         {
@@ -209,30 +265,6 @@ namespace ImageOrganizer.Controls
                                         typeof(float),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(0.5f));
-
-        public int CacheCapacity
-        {
-            get => (int)GetValue(CacheCapacityProperty);
-            set => SetValue(CacheCapacityProperty, value);
-        }
-
-        public static readonly DependencyProperty CacheCapacityProperty =
-            DependencyProperty.Register(nameof(CacheCapacity),
-                                        typeof(int),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(500, OnCacheCapacityChanged));
-
-        public int AutoCacheThreshold
-        {
-            get => (int)GetValue(AutoCacheThresholdProperty);
-            set => SetValue(AutoCacheThresholdProperty, value);
-        }
-
-        public static readonly DependencyProperty AutoCacheThresholdProperty =
-            DependencyProperty.Register(nameof(AutoCacheThreshold),
-                                        typeof(int),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(25));
 
         public Visibility UpperToolbarVisibility
         {
@@ -257,5 +289,56 @@ namespace ImageOrganizer.Controls
                                         typeof(Visibility),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(Visibility.Visible));
+        #endregion
+
+        #region Performance Properties
+        public int CacheCapacity
+        {
+            get => (int)GetValue(CacheCapacityProperty);
+            set => SetValue(CacheCapacityProperty, value);
+        }
+
+        public static readonly DependencyProperty CacheCapacityProperty =
+            DependencyProperty.Register(nameof(CacheCapacity),
+                                        typeof(int),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(500, OnCacheCapacityChanged));
+
+        public int AutoCacheThreshold
+        {
+            get => (int)GetValue(AutoCacheThresholdProperty);
+            set => SetValue(AutoCacheThresholdProperty, value);
+        }
+
+        public static readonly DependencyProperty AutoCacheThresholdProperty =
+            DependencyProperty.Register(nameof(AutoCacheThreshold),
+                                        typeof(int),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(25));
+
+        public double WindowDpi
+        {
+            get => (double)GetValue(WindowDpiProperty);
+            set => SetValue(WindowDpiProperty, value);
+        }
+
+        public static readonly DependencyProperty WindowDpiProperty =
+            DependencyProperty.Register(nameof(WindowDpi),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0.0, OnWindowDpiChanged));
+
+        public double WindowRefreshRate
+        {
+            get => (double)GetValue(WindowRefreshRateProperty);
+            set => SetValue(WindowRefreshRateProperty, value);
+        }
+
+        public static readonly DependencyProperty WindowRefreshRateProperty =
+            DependencyProperty.Register(nameof(WindowRefreshRate),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0.0, OnWindowRefreshRateChanged));
+        #endregion
     }
 }
