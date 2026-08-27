@@ -206,14 +206,26 @@ namespace ImageOrganizer.Controls
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(false));
 
-        public Brush AlignmentGridBrush
+        public Brush AlignmentGridPrimaryBrush
         {
-            get => (Brush)GetValue(AlignmentGridBrushProperty);
-            set => SetValue(AlignmentGridBrushProperty, value);
+            get => (Brush)GetValue(AlignmentGridPrimaryBrushProperty);
+            set => SetValue(AlignmentGridPrimaryBrushProperty, value);
         }
 
-        public static readonly DependencyProperty AlignmentGridBrushProperty =
-            DependencyProperty.Register(nameof(AlignmentGridBrush),
+        public static readonly DependencyProperty AlignmentGridPrimaryBrushProperty =
+            DependencyProperty.Register(nameof(AlignmentGridPrimaryBrush),
+                                        typeof(Brush),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(null, OnCanvasBrushChanged));
+
+        public Brush AlignmentGridSecondaryBrush
+        {
+            get => (Brush)GetValue(AlignmentGridSecondaryBrushProperty);
+            set => SetValue(AlignmentGridSecondaryBrushProperty, value);
+        }
+
+        public static readonly DependencyProperty AlignmentGridSecondaryBrushProperty =
+            DependencyProperty.Register(nameof(AlignmentGridSecondaryBrush),
                                         typeof(Brush),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(null, OnCanvasBrushChanged));
@@ -228,7 +240,7 @@ namespace ImageOrganizer.Controls
             DependencyProperty.Register(nameof(AlignmentGridThickness),
                                         typeof(double),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(1.0));
+                                        new PropertyMetadata(3.0));
 
         public Brush CropRectangleBrush
         {

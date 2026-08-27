@@ -216,7 +216,9 @@
                                         FontWeight="Bold"
                                         Padding="0"
                                         Background="{ThemeResource SolidBackgroundFillColorBaseAltBrush}"
-                                        AlignmentGridBrush="HotPink"
+                                        AlignmentGridPrimaryBrush="White"
+                                        AlignmentGridSecondaryBrush="Black"
+                                        AlignmentGridThickness="3"
                                         CropRectangleBrush="White"/>
 
         <!--Info Bar-->

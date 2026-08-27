@@ -59,7 +59,7 @@ namespace ImageOrganizer.Controls
         private bool _isPointerCapturedForCrop = false;
         private Point _previousPointerPosition = new(0, 0);
         private RectLocations _capturedCropRectLocation = RectLocations.Outside;
-        private ICanvasBrush? _alignmentGridBrush, _cropRectangleBrush;
+        private ICanvasBrush? _alignmentGridPrimaryBrush, _alignmentGridSecondaryBrush, _cropRectangleBrush;
         #endregion
 
         #region Properties
@@ -232,11 +232,17 @@ namespace ImageOrganizer.Controls
             if (d is not ImagePresenterControl ip || ip.SwapChainPanel.SwapChain is null)
                 return;
 
-            if (e.Property == AlignmentGridBrushProperty)
+            if (e.Property == AlignmentGridPrimaryBrushProperty)
             {
-                ip._alignmentGridBrush?.Dispose();
-                ip._alignmentGridBrush = null;
-                ip._alignmentGridBrush = ip.AlignmentGridBrush.CreateCanvasBrush(ip.SwapChainPanel.SwapChain.Device);
+                ip._alignmentGridPrimaryBrush?.Dispose();
+                ip._alignmentGridPrimaryBrush = null;
+                ip._alignmentGridPrimaryBrush = ip.AlignmentGridPrimaryBrush.CreateCanvasBrush(ip.SwapChainPanel.SwapChain.Device);
+            }
+            else if (e.Property == AlignmentGridSecondaryBrushProperty)
+            {
+                ip._alignmentGridSecondaryBrush?.Dispose();
+                ip._alignmentGridSecondaryBrush = null;
+                ip._alignmentGridSecondaryBrush = ip.AlignmentGridSecondaryBrush.CreateCanvasBrush(ip.SwapChainPanel.SwapChain.Device);
             }
             else if (e.Property == CropRectangleBrushProperty)
             {
@@ -287,9 +293,13 @@ namespace ImageOrganizer.Controls
             EnsureSwapChainDpi();
             EnsureRefreshRate();
 
-            _alignmentGridBrush?.Dispose();
-            _alignmentGridBrush = null;
-            _alignmentGridBrush = AlignmentGridBrush.CreateCanvasBrush(SwapChainPanel.SwapChain.Device);
+            _alignmentGridPrimaryBrush?.Dispose();
+            _alignmentGridPrimaryBrush = null;
+            _alignmentGridPrimaryBrush = AlignmentGridPrimaryBrush.CreateCanvasBrush(SwapChainPanel.SwapChain.Device);
+
+            _alignmentGridSecondaryBrush?.Dispose();
+            _alignmentGridSecondaryBrush = null;
+            _alignmentGridSecondaryBrush = AlignmentGridSecondaryBrush.CreateCanvasBrush(SwapChainPanel.SwapChain.Device);
 
             _cropRectangleBrush?.Dispose();
             _cropRectangleBrush = null;
@@ -481,10 +491,45 @@ namespace ImageOrganizer.Controls
             {
                 var panelWidth = SwapChainPanel.ActualWidth;
                 var panelHeight = SwapChainPanel.ActualHeight;
-                ds.DrawLine((float)(panelWidth / 3), 0, (float)(panelWidth / 3), (float)panelHeight, _alignmentGridBrush, (float)AlignmentGridThickness);
-                ds.DrawLine((float)(2 * panelWidth / 3), 0, (float)(2 * panelWidth / 3), (float)panelHeight, _alignmentGridBrush, (float)AlignmentGridThickness);
-                ds.DrawLine(0, (float)(panelHeight / 3), (float)panelWidth, (float)(panelHeight / 3), _alignmentGridBrush, (float)AlignmentGridThickness);
-                ds.DrawLine(0, (float)(2 * panelHeight / 3), (float)panelWidth, (float)(2 * panelHeight / 3), _alignmentGridBrush, (float)AlignmentGridThickness);
+                ds.DrawLine((float)(panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), 0,
+                            (float)(panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine((float)(panelWidth / 3), 0,
+                            (float)(panelWidth / 3), (float)panelHeight,
+                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine((float)(panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), 0,
+                            (float)(panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+
+                ds.DrawLine((float)(2 * panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), 0,
+                            (float)(2 * panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine((float)(2 * panelWidth / 3), 0,
+                            (float)(2 * panelWidth / 3), (float)panelHeight,
+                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine((float)(2 * panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), 0,
+                            (float)(2 * panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+
+                ds.DrawLine(0, (float)(panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
+                            (float)panelWidth, (float)(panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine(0, (float)(panelHeight / 3),
+                            (float)panelWidth, (float)(panelHeight / 3),
+                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine(0, (float)(panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
+                            (float)panelWidth, (float)(panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+
+                ds.DrawLine(0, (float)(2 * panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
+                            (float)panelWidth, (float)(2 * panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine(0, (float)(2 * panelHeight / 3),
+                            (float)panelWidth, (float)(2 * panelHeight / 3),
+                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
+                ds.DrawLine(0, (float)(2 * panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
+                            (float)panelWidth, (float)(2 * panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
+                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
             }
 
             SwapChainPanel.SwapChain.Present();
