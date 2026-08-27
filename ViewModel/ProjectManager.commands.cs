@@ -546,9 +546,23 @@ namespace ImageOrganizer.ViewModel
                 IsEnabled = true
             });
 
+            ToolsToggleFlag1Command.KeyboardAccelerators.Add(new KeyboardAccelerator
+            {
+                Key = VirtualKey.Number1,
+                Modifiers = VirtualKeyModifiers.Control,
+                IsEnabled = true
+            });
+
             ToolsToggleFlag2Command.KeyboardAccelerators.Add(new KeyboardAccelerator
             {
                 Key = VirtualKey.Number2,
+                IsEnabled = true
+            });
+
+            ToolsToggleFlag2Command.KeyboardAccelerators.Add(new KeyboardAccelerator
+            {
+                Key = VirtualKey.Number2,
+                Modifiers = VirtualKeyModifiers.Control,
                 IsEnabled = true
             });
 
@@ -558,9 +572,23 @@ namespace ImageOrganizer.ViewModel
                 IsEnabled = true
             });
 
+            ToolsToggleFlag3Command.KeyboardAccelerators.Add(new KeyboardAccelerator
+            {
+                Key = VirtualKey.Number3,
+                Modifiers = VirtualKeyModifiers.Control,
+                IsEnabled = true
+            });
+
             ToolsToggleFlag4Command.KeyboardAccelerators.Add(new KeyboardAccelerator
             {
                 Key = VirtualKey.Number4,
+                IsEnabled = true
+            });
+
+            ToolsToggleFlag4Command.KeyboardAccelerators.Add(new KeyboardAccelerator
+            {
+                Key = VirtualKey.Number4,
+                Modifiers = VirtualKeyModifiers.Control,
                 IsEnabled = true
             });
 

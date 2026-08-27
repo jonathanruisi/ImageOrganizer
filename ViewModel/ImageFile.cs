@@ -304,12 +304,13 @@ namespace ImageOrganizer.ViewModel
             var height = (int)(imageHeight * cornerFraction);
 
             using var md5 = MD5.Create();
-            if (md5 is null || md5.Hash is null)
-                return null;
             md5.TransformBlock(Bitmap.GetPixelBytes(0, 0, width, height), 0, width * height * 4, null, 0);
             md5.TransformBlock(Bitmap.GetPixelBytes(imageWidth - width, 0, width, height), 0, width * height * 4, null, 0);
             md5.TransformBlock(Bitmap.GetPixelBytes(0, imageHeight - height, width, height), 0, width * height * 4, null, 0);
             md5.TransformFinalBlock(Bitmap.GetPixelBytes(imageWidth - width, imageHeight - height, width, height), 0, width * height * 4);
+
+            if (md5 is null || md5.Hash is null)
+                return null;
             Checksum = Convert.ToHexStringLower(md5.Hash);
             return Checksum;
         }
