@@ -42,8 +42,6 @@ namespace ImageOrganizer.Controls
     public sealed partial class ImagePresenterControl : UserControl
     {
         #region Fields
-        private readonly Lock _bitmapLock = new();
-        private readonly Lock _transformLock = new();
         private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _renderTimer;
         private readonly LruBitmapCache _bitmapCache;
         private readonly InputCursor _primaryCursor, _hoverCursor, _dragCursor;
@@ -51,7 +49,7 @@ namespace ImageOrganizer.Controls
         private CanvasBitmap? _bitmap;
         private int _mediaIndex, _mediaTotal;
         private Matrix3x2 _transform = Matrix3x2.Identity;
-        private bool _isPreCaching = false;
+        private int _isPreCaching;
         private bool _isScaling = false;
         private Rect _cropRect;
         private Quadrilateral _transformedImageQuadrilateral = Quadrilateral.Zero;
@@ -60,6 +58,9 @@ namespace ImageOrganizer.Controls
         private Point _previousPointerPosition = new(0, 0);
         private RectLocations _capturedCropRectLocation = RectLocations.Outside;
         private ICanvasBrush? _alignmentGridPrimaryBrush, _alignmentGridSecondaryBrush, _cropRectangleBrush;
+        private CanvasGeometry? _alignmentGridPrimaryGeometry, _alignmentGridSecondaryGeometry;
+        private Size _alignmentGridGeometrySize;
+        private float _alignmentGridGeometryThickness;
         #endregion
 
         #region Properties
@@ -119,10 +120,9 @@ namespace ImageOrganizer.Controls
                 }
             }
 
-            lock (_bitmapLock)
-            {
-                _bitmap = imageFile.Bitmap;
-            }
+            // All _bitmap/_transform access occurs on the UI thread
+            // (dispatcher timer, messenger handlers, and DP callbacks), so no locking is needed.
+            _bitmap = imageFile.Bitmap;
 
             AllowManualTranslation = true;
             AllowManualScaling = true;
@@ -132,10 +132,7 @@ namespace ImageOrganizer.Controls
 
         public void ClearImage()
         {
-            lock (_bitmapLock)
-            {
-                _bitmap = null;
-            }
+            _bitmap = null;
 
             _transformedImageQuadrilateral = Quadrilateral.Zero;
             _isPointerCapturedForImage = false;
@@ -312,14 +309,15 @@ namespace ImageOrganizer.Controls
             SwapChainPanel.RemoveFromVisualTree();
             SwapChainPanel.SwapChain = null;
 
-            CanvasBitmap? bitmapToDispose;
-            lock (_bitmapLock)
-            {
-                bitmapToDispose = _bitmap;
-                _bitmap = null;
-            }
+            var bitmapToDispose = _bitmap;
+            _bitmap = null;
             bitmapToDispose?.Dispose();
             _bitmapCache.Dispose();
+
+            _alignmentGridPrimaryGeometry?.Dispose();
+            _alignmentGridPrimaryGeometry = null;
+            _alignmentGridSecondaryGeometry?.Dispose();
+            _alignmentGridSecondaryGeometry = null;
         }
 
         private async void UserControl_KeyboardAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
@@ -394,11 +392,7 @@ namespace ImageOrganizer.Controls
         {
             using var ds = SwapChainPanel.SwapChain.CreateDrawingSession(Colors.Transparent);
 
-            CanvasBitmap? bitmap;
-            lock (_bitmapLock)
-            {
-                bitmap = _bitmap;
-            }
+            var bitmap = _bitmap;
 
             if (bitmap is null)
             {
@@ -406,13 +400,7 @@ namespace ImageOrganizer.Controls
                 return;
             }
 
-            Matrix3x2 transform;
-            lock (_transformLock)
-            {
-                transform = _transform;
-            }
-
-            ds.Transform = transform;
+            ds.Transform = _transform;
             ds.DrawImage(bitmap, 0, 0);
             ds.Transform = Matrix3x2.Identity;
 
@@ -421,17 +409,7 @@ namespace ImageOrganizer.Controls
             const float adornSpacing = 10f;
             const float adornSize = 100f;
             const float adornOutlineThickness = 5f;
-            var numAdorn = 0;
             var adornOffset = 0;
-
-            if (ViewModel.ActiveElement?.CheckFlag(4) == true)
-                numAdorn++;
-            if (ViewModel.ActiveElement?.CheckFlag(3) == true)
-                numAdorn++;
-            if (ViewModel.ActiveElement?.CheckFlag(2) == true)
-                numAdorn++;
-            if (ViewModel.ActiveElement?.CheckFlag(1) == true)
-                numAdorn++;
 
             for (var i = 1; i <= 4; i++)
             {
@@ -489,47 +467,10 @@ namespace ImageOrganizer.Controls
             // Draw the alignment grid if enabled
             if (ShowAlignmentGrid)
             {
-                var panelWidth = SwapChainPanel.ActualWidth;
-                var panelHeight = SwapChainPanel.ActualHeight;
-                ds.DrawLine((float)(panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), 0,
-                            (float)(panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine((float)(panelWidth / 3), 0,
-                            (float)(panelWidth / 3), (float)panelHeight,
-                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine((float)(panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), 0,
-                            (float)(panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
-
-                ds.DrawLine((float)(2 * panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), 0,
-                            (float)(2 * panelWidth / 3) - ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine((float)(2 * panelWidth / 3), 0,
-                            (float)(2 * panelWidth / 3), (float)panelHeight,
-                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine((float)(2 * panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), 0,
-                            (float)(2 * panelWidth / 3) + ((float)(AlignmentGridThickness / 3)), (float)panelHeight,
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
-
-                ds.DrawLine(0, (float)(panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
-                            (float)panelWidth, (float)(panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine(0, (float)(panelHeight / 3),
-                            (float)panelWidth, (float)(panelHeight / 3),
-                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine(0, (float)(panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
-                            (float)panelWidth, (float)(panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
-
-                ds.DrawLine(0, (float)(2 * panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
-                            (float)panelWidth, (float)(2 * panelHeight / 3) - ((float)(AlignmentGridThickness / 3)),
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine(0, (float)(2 * panelHeight / 3),
-                            (float)panelWidth, (float)(2 * panelHeight / 3),
-                            _alignmentGridPrimaryBrush, (float)(AlignmentGridThickness / 3));
-                ds.DrawLine(0, (float)(2 * panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
-                            (float)panelWidth, (float)(2 * panelHeight / 3) + ((float)(AlignmentGridThickness / 3)),
-                            _alignmentGridSecondaryBrush, (float)(AlignmentGridThickness / 3));
+                var strokeWidth = (float)(AlignmentGridThickness / 3);
+                EnsureAlignmentGridGeometry((float)SwapChainPanel.ActualWidth, (float)SwapChainPanel.ActualHeight);
+                ds.DrawGeometry(_alignmentGridSecondaryGeometry, _alignmentGridSecondaryBrush, strokeWidth);
+                ds.DrawGeometry(_alignmentGridPrimaryGeometry, _alignmentGridPrimaryBrush, strokeWidth);
             }
 
             SwapChainPanel.SwapChain.Present();
@@ -855,10 +796,7 @@ namespace ImageOrganizer.Controls
             _transformedImageQuadrilateral = new Quadrilateral(topLeft, topRight, bottomRight, bottomLeft);
             AdjustCropRectForImageBoundsChange(previousImageBounds, _transformedImageQuadrilateral.BoundingBox);
 
-            lock (_transformLock)
-            {
-                _transform = transform;
-            }
+            _transform = transform;
         }
 
         /// <summary>
@@ -897,13 +835,7 @@ namespace ImageOrganizer.Controls
             if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null || _cropRect.IsEmpty)
                 return Rect.Empty;
 
-            Matrix3x2 transform;
-            lock (_transformLock)
-            {
-                transform = _transform;
-            }
-
-            if (!Matrix3x2.Invert(transform, out var inverseTransform))
+            if (!Matrix3x2.Invert(_transform, out var inverseTransform))
                 return Rect.Empty;
 
             var topLeft = Vector2.Transform(new Vector2((float)_cropRect.Left, (float)_cropRect.Top), inverseTransform);
@@ -1055,6 +987,97 @@ namespace ImageOrganizer.Controls
             }
         }
 
+        /// <summary>
+        /// Builds (or rebuilds) the cached rule-of-thirds grid geometry.
+        /// The geometry is only regenerated when the panel size or grid thickness changes.
+        /// </summary>
+        /// <param name="panelWidth">Current width of the swap chain panel</param>
+        /// <param name="panelHeight">Current height of the swap chain panel</param>
+        private void EnsureAlignmentGridGeometry(float panelWidth, float panelHeight)
+        {
+            var thickness = (float)(AlignmentGridThickness / 3);
+            if (_alignmentGridPrimaryGeometry is not null &&
+                _alignmentGridSecondaryGeometry is not null &&
+                _alignmentGridGeometrySize.Width == panelWidth &&
+                _alignmentGridGeometrySize.Height == panelHeight &&
+                _alignmentGridGeometryThickness == thickness)
+                return;
+
+            _alignmentGridPrimaryGeometry?.Dispose();
+            _alignmentGridPrimaryGeometry = null;
+            _alignmentGridSecondaryGeometry?.Dispose();
+            _alignmentGridSecondaryGeometry = null;
+
+            var device = SwapChainPanel.SwapChain.Device;
+            var x1 = panelWidth / 3;
+            var x2 = 2 * panelWidth / 3;
+            var y1 = panelHeight / 3;
+            var y2 = 2 * panelHeight / 3;
+
+            static void AddLine(CanvasPathBuilder pb, float startX, float startY, float endX, float endY)
+            {
+                pb.BeginFigure(startX, startY);
+                pb.AddLine(endX, endY);
+                pb.EndFigure(CanvasFigureLoop.Open);
+            }
+
+            using (var pb = new CanvasPathBuilder(device))
+            {
+                AddLine(pb, x1, 0, x1, panelHeight);
+                AddLine(pb, x2, 0, x2, panelHeight);
+                AddLine(pb, 0, y1, panelWidth, y1);
+                AddLine(pb, 0, y2, panelWidth, y2);
+                _alignmentGridPrimaryGeometry = CanvasGeometry.CreatePath(pb);
+            }
+
+            using (var pb = new CanvasPathBuilder(device))
+            {
+                AddLine(pb, x1 - thickness, 0, x1 - thickness, panelHeight);
+                AddLine(pb, x1 + thickness, 0, x1 + thickness, panelHeight);
+                AddLine(pb, x2 - thickness, 0, x2 - thickness, panelHeight);
+                AddLine(pb, x2 + thickness, 0, x2 + thickness, panelHeight);
+                AddLine(pb, 0, y1 - thickness, panelWidth, y1 - thickness);
+                AddLine(pb, 0, y1 + thickness, panelWidth, y1 + thickness);
+                AddLine(pb, 0, y2 - thickness, panelWidth, y2 - thickness);
+                AddLine(pb, 0, y2 + thickness, panelWidth, y2 + thickness);
+                _alignmentGridSecondaryGeometry = CanvasGeometry.CreatePath(pb);
+            }
+
+            _alignmentGridGeometrySize = new Size(panelWidth, panelHeight);
+            _alignmentGridGeometryThickness = thickness;
+        }
+
+        /// <summary>
+        /// Pre-caches upcoming sibling images without blocking the caller.
+        /// Reentrancy-safe: only one pre-caching pass runs at a time.
+        /// </summary>
+        /// <param name="imageFile">The currently displayed image whose siblings should be pre-cached</param>
+        private async Task PreCacheUpcomingImagesAsync(ImageFile imageFile)
+        {
+            if (Interlocked.CompareExchange(ref _isPreCaching, 1, 0) != 0)
+                return;
+
+            try
+            {
+                var startIndex = _mediaIndex + 1;
+                for (var i = startIndex; i < startIndex + AutoCacheThreshold && i < _mediaTotal; i++)
+                {
+                    if (imageFile.Parent.Children[i] is ImageFile nextImage && !nextImage.IsCached)
+                    {
+                        await _bitmapCache.LoadImageAsync(SwapChainPanel.SwapChain.Device, nextImage);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Pre-caching failed: {ex}");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isPreCaching, 0);
+            }
+        }
+
         private void RegisterMessages()
         {
             var services = App.Current.Services
@@ -1104,32 +1127,11 @@ namespace ImageOrganizer.Controls
                     if (m.OldValue is ImageFile prevImage && prevImage.Parent == imageFile.Parent)
                         prevIndex = prevImage.Parent.Children.IndexOf(prevImage);
 
-                    if (!r._isPreCaching && (prevIndex == 0 || prevIndex < r._mediaIndex))
+                    if (prevIndex == 0 || prevIndex < r._mediaIndex)
                     {
-                        var proceed = false;
-                        var startIndex = r._mediaIndex + 1;
-                        for (var i = startIndex; i < startIndex + r.AutoCacheThreshold && i < r._mediaTotal; i++)
-                        {
-                            if (imageFile.Parent.Children[i] is ImageFile nextImage && !nextImage.IsCached)
-                            {
-                                proceed = true;
-                                startIndex = i;
-                                break;
-                            }
-                        }
-
-                        if (proceed)
-                        {
-                            r._isPreCaching = true;
-                            for (var i = startIndex; i < startIndex + r.AutoCacheThreshold && i < r._mediaTotal; i++)
-                            {
-                                if (imageFile.Parent.Children[i] is ImageFile nextImage && !nextImage.IsCached)
-                                {
-                                    await r._bitmapCache.LoadImageAsync(r.SwapChainPanel.SwapChain.Device, nextImage);
-                                }
-                            }
-                            r._isPreCaching = false;
-                        }
+                        // Fire-and-forget by design: pre-caching must not delay display of the
+                        // current image, and the method handles its own errors and reentrancy.
+                        _ = r.PreCacheUpcomingImagesAsync(imageFile);
                     }
                 }
             });
