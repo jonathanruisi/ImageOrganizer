@@ -46,17 +46,11 @@ namespace ImageOrganizer.Controls
         private readonly LruBitmapCache _bitmapCache;
         private readonly InputCursor _primaryCursor, _hoverCursor, _dragCursor;
         private readonly InputCursor _dragWECursor, _dragNSCursor, _dragNESWCursor, _dragNWSECursor;
-        private CanvasBitmap? _bitmap;
+        private readonly List<ImagePresenterLayer> _layers;
         private int _mediaIndex, _mediaTotal;
-        private Matrix3x2 _transform = Matrix3x2.Identity;
         private int _isPreCaching;
         private bool _isScaling = false;
-        private Rect _cropRect;
-        private Quadrilateral _transformedImageQuadrilateral = Quadrilateral.Zero;
-        private bool _isPointerCapturedForImage = false;
-        private bool _isPointerCapturedForCrop = false;
         private Point _previousPointerPosition = new(0, 0);
-        private RectLocations _capturedCropRectLocation = RectLocations.Outside;
         private ICanvasBrush? _alignmentGridPrimaryBrush, _alignmentGridSecondaryBrush, _cropRectangleBrush;
         private CanvasGeometry? _alignmentGridPrimaryGeometry, _alignmentGridSecondaryGeometry;
         private Size _alignmentGridGeometrySize;
@@ -90,39 +84,33 @@ namespace ImageOrganizer.Controls
             // Initialize bitmap cache
             _bitmapCache = new(CacheCapacity);
 
+            // Initialize layer list and add the background layer (index 0) to it.
+            // The background layer is always present and cannot be removed.
+            _layers = [new ImagePresenterLayer(this)];
+
             // Register for messages
             RegisterMessages();
         }
         #endregion
 
         #region Public Methods
-        public void DisplayCurrentImageFile()
+        public void SetLayerToActiveImage(bool makeActive = true, int layerIndex = 0)
         {
-            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null)
-            {
-                ClearImage();
+            if (layerIndex < 0 ||
+                layerIndex >= _layers.Count ||
+                ViewModel.ActiveElement is not ImageFile imageFile)
                 return;
-            }
 
-            if (!LockTransform)
-            {
-                if (imageFile.Transform == default)
-                {
-                    ImageRotation = 0;
-                    ScaleImageToFit();
-                }
-                else
-                {
-                    RelativeImageScale = imageFile.Transform.Scale;
-                    ImageRotation = imageFile.Transform.Rotation;
-                    ImageTranslationX = imageFile.Transform.TranslationX;
-                    ImageTranslationY = imageFile.Transform.TranslationY;
-                }
-            }
+            _layers[layerIndex] = new ImagePresenterLayer(this, imageFile);
+            if (makeActive)
+                ActiveLayer = layerIndex;
 
-            // All _bitmap/_transform access occurs on the UI thread
-            // (dispatcher timer, messenger handlers, and DP callbacks), so no locking is needed.
-            _bitmap = imageFile.Bitmap;
+            ApplyTransformPropertiesFromLayer(layerIndex);
+
+            // The new layer starts with an identity transform and a zero quadrilateral.
+            // If applying the transform properties above did not change any dependency property
+            // values, OnImageTransformChanged never fires, so update the transform explicitly.
+            _layers[layerIndex].UpdateTransform();
 
             AllowManualTranslation = true;
             AllowManualScaling = true;
@@ -130,29 +118,31 @@ namespace ImageOrganizer.Controls
             EnableCropMode = false;
         }
 
-        public void ClearImage()
+        public void RemoveAllLayers()
         {
-            _bitmap = null;
-
-            _transformedImageQuadrilateral = Quadrilateral.Zero;
-            _isPointerCapturedForImage = false;
-            _isPointerCapturedForCrop = false;
             _previousPointerPosition = new(0, 0);
-            _capturedCropRectLocation = RectLocations.Outside;
             ImageTranslationX = 0;
             ImageTranslationY = 0;
             ImageRotation = 0;
             ImageScale = 1;
 
+            _layers.Clear();
+
             AllowManualTranslation = false;
             AllowManualScaling = false;
             AllowManualRotation = false;
             EnableCropMode = false;
+
+            // Add the background layer back to the list
+            _layers.Add(new ImagePresenterLayer(this));
         }
 
-        public void ScaleImageToFit()
+        public void ScaleLayerToFit(int layerIndex = 0)
         {
-            ImageScale = GetFitScale();
+            if (layerIndex < 0 || layerIndex >= _layers.Count)
+                return;
+
+            ImageScale = _layers[layerIndex].GetFitScale(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight);
             ImageTranslationX = 0;
             ImageTranslationY = 0;
         }
@@ -190,14 +180,14 @@ namespace ImageOrganizer.Controls
 
                 ip._isScaling = true;
                 ip.LinearImageScale = Math.Log2(ip.ImageScale) * 10;
-                ip.RelativeImageScale = ip.ImageScale / ip.GetFitScale();
+                ip.RelativeImageScale = ip.ImageScale / (ip.ActiveLayerInstance?.GetFitScale(ip.SwapChainPanel.ActualWidth, ip.SwapChainPanel.ActualHeight) ?? 1.0);
                 ip._isScaling = false;
             }
             else if (e.Property == LinearImageScaleProperty && !ip._isScaling)
             {
                 ip._isScaling = true;
                 ip.ImageScale = Math.Pow(2, 0.1 * ip.LinearImageScale);
-                ip.RelativeImageScale = ip.ImageScale / ip.GetFitScale();
+                ip.RelativeImageScale = ip.ImageScale / (ip.ActiveLayerInstance?.GetFitScale(ip.SwapChainPanel.ActualWidth, ip.SwapChainPanel.ActualHeight) ?? 1.0);
                 ip._isScaling = false;
             }
             else if (e.Property == RelativeImageScaleProperty && !ip._isScaling)
@@ -209,7 +199,7 @@ namespace ImageOrganizer.Controls
                 }
 
                 ip._isScaling = true;
-                ip.ImageScale = ip.RelativeImageScale * ip.GetFitScale();
+                ip.ImageScale = ip.RelativeImageScale * (ip.ActiveLayerInstance?.GetFitScale(ip.SwapChainPanel.ActualWidth, ip.SwapChainPanel.ActualHeight) ?? 1.0);
                 ip.LinearImageScale = ip.ImageScale > 0 ? Math.Log2(ip.ImageScale) * 10 : 0;
                 ip._isScaling = false;
             }
@@ -221,7 +211,7 @@ namespace ImageOrganizer.Controls
             }
 
             if (!ip._isScaling)
-                ip.UpdateTransform();
+                ip.ActiveLayerInstance?.UpdateTransform();
         }
 
         private static void OnCanvasBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -262,18 +252,21 @@ namespace ImageOrganizer.Controls
             if (d is not ImagePresenterControl ip)
                 return;
 
-            if (ip.EnableCropMode && ip.ViewModel.ActiveElement is ImageFile)
+            if (ip.ActiveLayerInstance is not { } layer)
+                return;
+
+            if (ip.EnableCropMode && layer.ImageFile is not null)
             {
                 ip.AllowManualRotation = false;
                 ip.ToggleButtonAllowRotation.IsEnabled = false;
                 ip.ImageRotation = 0;
-                ip._cropRect = ip._transformedImageQuadrilateral.BoundingBox;
+                layer.CropRectangle = layer.TransformedImageQuadrilateral.BoundingBox;
             }
             else
             {
                 ip.AllowManualRotation = true;
                 ip.ToggleButtonAllowRotation.IsEnabled = true;
-                ip._cropRect = Rect.Empty;
+                layer.CropRectangle = Rect.Empty;
             }
         }
 
@@ -281,6 +274,14 @@ namespace ImageOrganizer.Controls
         {
             if (d is not ImagePresenterControl ip)
                 return;
+        }
+
+        private static void OnActiveLayerChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            ip.ActiveLayerInstance?.UpdateTransform();
         }
         #endregion
 
@@ -309,15 +310,12 @@ namespace ImageOrganizer.Controls
             SwapChainPanel.RemoveFromVisualTree();
             SwapChainPanel.SwapChain = null;
 
-            var bitmapToDispose = _bitmap;
-            _bitmap = null;
-            bitmapToDispose?.Dispose();
-            _bitmapCache.Dispose();
-
             _alignmentGridPrimaryGeometry?.Dispose();
             _alignmentGridPrimaryGeometry = null;
             _alignmentGridSecondaryGeometry?.Dispose();
             _alignmentGridSecondaryGeometry = null;
+
+            _bitmapCache.Dispose();
         }
 
         private async void UserControl_KeyboardAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs e)
@@ -335,33 +333,33 @@ namespace ImageOrganizer.Controls
             }
             else if (sender.Key == VirtualKey.Enter)
             {
-                if (EnableCropMode && ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                if (EnableCropMode && ActiveLayerInstance is { ImageFile: ImageFile imageFile } layer)
                 {
-                    var sourceCropRect = GetSourceCropRect();
+                    var sourceCropRect = layer.GetSourceCropRect();
                     if (sourceCropRect.IsEmpty)
                         return;
 
                     await imageFile.CropAsync(sourceCropRect);
                     EnableCropMode = false;
-                    DisplayCurrentImageFile();
+                    ApplyTransformPropertiesFromLayer(ActiveLayer);
                     e.Handled = true;
                 }
             }
             else if (sender.Key == VirtualKey.F)
             {
-                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                if (ActiveLayerInstance?.ImageFile is not null)
                 {
                     if (sender.Modifiers.HasFlag(VirtualKeyModifiers.Control))
                         ImageScale = 1;
                     else
-                        ScaleImageToFit();
+                        ScaleLayerToFit(ActiveLayer);
 
                     e.Handled = true;
                 }
             }
             else if (sender.Key == VirtualKey.L)
             {
-                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                if (ActiveLayerInstance?.ImageFile is not null)
                 {
                     LockTransform = !LockTransform;
 
@@ -370,7 +368,7 @@ namespace ImageOrganizer.Controls
             }
             else if (sender.Key == VirtualKey.O)
             {
-                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                if (ActiveLayerInstance?.ImageFile is not null)
                 {
                     OverlayPreviousImage = !OverlayPreviousImage;
                     e.Handled = true;
@@ -378,7 +376,7 @@ namespace ImageOrganizer.Controls
             }
             else if (sender.Key == VirtualKey.G)
             {
-                if (ViewModel.ActiveElement is ImageFile imageFile && imageFile is not null)
+                if (ActiveLayerInstance?.ImageFile is not null)
                 {
                     ShowAlignmentGrid = !ShowAlignmentGrid;
                     e.Handled = true;
@@ -392,15 +390,15 @@ namespace ImageOrganizer.Controls
         {
             using var ds = SwapChainPanel.SwapChain.CreateDrawingSession(Colors.Transparent);
 
-            var bitmap = _bitmap;
-
-            if (bitmap is null)
+            if (ActiveLayerInstance is not ImagePresenterLayer layer ||
+                layer.ImageFile is not ImageFile imageFile ||
+                imageFile.Bitmap is not CanvasBitmap bitmap)
             {
                 SwapChainPanel.SwapChain.Present();
                 return;
             }
 
-            ds.Transform = _transform;
+            ds.Transform = layer.Transform;
             ds.DrawImage(bitmap, 0, 0);
             ds.Transform = Matrix3x2.Identity;
 
@@ -413,7 +411,7 @@ namespace ImageOrganizer.Controls
 
             for (var i = 1; i <= 4; i++)
             {
-                if (ViewModel.ActiveElement?.CheckFlag(i) == false)
+                if (imageFile.CheckFlag(i) == false)
                     continue;
 
                 var color = i switch
@@ -445,9 +443,9 @@ namespace ImageOrganizer.Controls
             }
 
             // If in cropping mode, shade the area outside the crop rectangle
-            if (EnableCropMode && !_cropRect.IsEmpty)
+            if (EnableCropMode && !layer.CropRectangle.IsEmpty)
             {
-                var cropRect = _cropRect;
+                var cropRect = layer.CropRectangle;
                 var panelWidth = SwapChainPanel.ActualWidth;
                 var panelHeight = SwapChainPanel.ActualHeight;
 
@@ -481,13 +479,15 @@ namespace ImageOrganizer.Controls
         private void SwapChainPanel_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             SwapChainPanel?.SwapChain?.ResizeBuffers(e.NewSize);
+            var actualWidth = SwapChainPanel?.ActualWidth ?? 0;
+            var actualHeight = SwapChainPanel?.ActualHeight ?? 0;
 
             // Re-apply relative scale so it stays consistent with the new panel size
             var oldScale = ImageScale;
             var relative = RelativeImageScale;
 
             _isScaling = true;
-            ImageScale = relative * GetFitScale();
+            ImageScale = relative * (ActiveLayerInstance?.GetFitScale(actualWidth, actualHeight) ?? 1.0);
             LinearImageScale = ImageScale > 0 ? Math.Log2(ImageScale) * 10 : 0;
 
             // Keep the image point at the viewport center fixed:
@@ -502,14 +502,14 @@ namespace ImageOrganizer.Controls
             }
             _isScaling = false;
 
-            UpdateTransform();
+            ActiveLayerInstance?.UpdateTransform();
         }
         #endregion
 
         #region Event Handlers (Pointer)
         private void PresentationBorder_PointerEntered(object sender, PointerRoutedEventArgs e)
         {
-            if (_isPointerCapturedForImage || _isPointerCapturedForCrop)
+            if (ActiveLayerInstance is { } layer && (layer.IsDragging || layer.IsCropping))
                 return;
 
             ProtectedCursor = _primaryCursor;
@@ -517,7 +517,7 @@ namespace ImageOrganizer.Controls
 
         private void PresentationBorder_PointerExited(object sender, PointerRoutedEventArgs e)
         {
-            if (_isPointerCapturedForImage || _isPointerCapturedForCrop)
+            if (ActiveLayerInstance is { } layer && (layer.IsDragging || layer.IsCropping))
                 return;
 
             ProtectedCursor = _primaryCursor;
@@ -525,9 +525,12 @@ namespace ImageOrganizer.Controls
 
         private void PresentationBorder_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
+            if (ActiveLayerInstance is not { } layer)
+                return;
+
             var point = e.GetCurrentPoint(PresentationBorder);
-            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
-            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+            var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
             if (point.Properties.IsLeftButtonPressed)
             {
@@ -535,8 +538,8 @@ namespace ImageOrganizer.Controls
                 // so capture the pointer for cropping
                 if (EnableCropMode && cropRectProximity != RectLocations.Outside)
                 {
-                    _isPointerCapturedForCrop = PresentationBorder.CapturePointer(e.Pointer);
-                    _capturedCropRectLocation = cropRectProximity;
+                    layer.IsCropping = PresentationBorder.CapturePointer(e.Pointer);
+                    layer.CropRectAdjustmentLocation = cropRectProximity;
                 }
                 // Left-click occured within the image bounds
                 else if (isWithinImage && AllowManualTranslation)
@@ -552,7 +555,7 @@ namespace ImageOrganizer.Controls
                     // Otherwise, capture the pointer for dragging the image
                     else
                     {
-                        _isPointerCapturedForImage = PresentationBorder.CapturePointer(e.Pointer);
+                        layer.IsDragging = PresentationBorder.CapturePointer(e.Pointer);
                         ProtectedCursor = _dragCursor;
                     }
                 }
@@ -562,57 +565,72 @@ namespace ImageOrganizer.Controls
                 // Reset the crop rectangle to the bounding box of the image
                 if (EnableCropMode && cropRectProximity != RectLocations.Outside)
                 {
-                    _cropRect = _transformedImageQuadrilateral.BoundingBox;
+                    layer.CropRectangle = layer.TransformedImageQuadrilateral.BoundingBox;
                 }
             }
         }
 
         private void PresentationBorder_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
+            if (ActiveLayerInstance is not { } layer)
+                return;
+
             var point = e.GetCurrentPoint(PresentationBorder);
-            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
-            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+            var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
             SetCursor(isWithinImage, cropRectProximity);
-            _isPointerCapturedForImage = false;
-            _isPointerCapturedForCrop = false;
+            layer.IsDragging = false;
+            layer.IsCropping = false;
         }
 
         private void PresentationBorder_PointerCanceled(object sender, PointerRoutedEventArgs e)
         {
+            if (ActiveLayerInstance is not { } layer)
+                return;
+
             var point = e.GetCurrentPoint(PresentationBorder);
-            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
-            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+            var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
             SetCursor(isWithinImage, cropRectProximity);
-            _isPointerCapturedForImage = false;
-            _isPointerCapturedForCrop = false;
+            layer.IsDragging = false;
+            layer.IsCropping = false;
         }
 
         private void PresentationBorder_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
         {
+            if (ActiveLayerInstance is not { } layer)
+                return;
+
             var point = e.GetCurrentPoint(PresentationBorder);
-            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
-            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+            var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
             SetCursor(isWithinImage, cropRectProximity);
-            _isPointerCapturedForImage = false;
-            _isPointerCapturedForCrop = false;
+            layer.IsDragging = false;
+            layer.IsCropping = false;
         }
 
         private void PresentationBorder_PointerMoved(object sender, PointerRoutedEventArgs e)
         {
+            if (ActiveLayerInstance is not { } layer)
+                return;
+
             var point = e.GetCurrentPoint(PresentationBorder);
-            var isWithinImage = _transformedImageQuadrilateral.Contains(point.Position);
-            var cropRectProximity = _cropRect.IsPointOnOrNear(point.Position, SnapDistance);
+            var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
+            var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
             var deltaX = point.Position.X - _previousPointerPosition.X;
             var deltaY = point.Position.Y - _previousPointerPosition.Y;
 
             // Resize the crop rectangle if the pointer is on or near one of its edges or corners,
             // or move the crop rectangle if the pointer is inside it.
-            if (_isPointerCapturedForCrop && point.Properties.IsLeftButtonPressed)
+            if (layer.IsCropping && point.Properties.IsLeftButtonPressed)
             {
-                switch (_capturedCropRectLocation)
+                var cropRect = layer.CropRectangle;
+                var imageBounds = layer.TransformedImageQuadrilateral.BoundingBox;
+
+                switch (layer.CropRectAdjustmentLocation)
                 {
                     case RectLocations.Left:
                         AdjustX();
@@ -654,73 +672,75 @@ namespace ImageOrganizer.Controls
                         break;
                 }
 
+                layer.CropRectangle = cropRect;
+
                 void AdjustX(bool includeWidth = false)
                 {
-                    if (_cropRect.X + deltaX < _transformedImageQuadrilateral.BoundingBox.Left)
-                        _cropRect.X = _transformedImageQuadrilateral.BoundingBox.Left;
-                    else if (includeWidth && _cropRect.X + _cropRect.Width + deltaX > _transformedImageQuadrilateral.BoundingBox.Right)
-                        _cropRect.X = _transformedImageQuadrilateral.BoundingBox.Right - _cropRect.Width;
-                    else if (_cropRect.X + deltaX > _cropRect.Right - 1)
-                        _cropRect.X = _cropRect.Right - 1;
+                    if (cropRect.X + deltaX < imageBounds.Left)
+                        cropRect.X = imageBounds.Left;
+                    else if (includeWidth && cropRect.X + cropRect.Width + deltaX > imageBounds.Right)
+                        cropRect.X = imageBounds.Right - cropRect.Width;
+                    else if (cropRect.X + deltaX > cropRect.Right - 1)
+                        cropRect.X = cropRect.Right - 1;
                     else
-                        _cropRect.X += deltaX;
+                        cropRect.X += deltaX;
                 }
 
                 void AdjustY(bool includeHeight = false)
                 {
-                    if (_cropRect.Y + deltaY < _transformedImageQuadrilateral.BoundingBox.Top)
-                        _cropRect.Y = _transformedImageQuadrilateral.BoundingBox.Top;
-                    else if (includeHeight && _cropRect.Y + _cropRect.Height + deltaY > _transformedImageQuadrilateral.BoundingBox.Bottom)
-                        _cropRect.Y = _transformedImageQuadrilateral.BoundingBox.Bottom - _cropRect.Height;
-                    else if (_cropRect.Y + deltaY > _cropRect.Bottom - 1)
-                        _cropRect.Y = _cropRect.Bottom - 1;
+                    if (cropRect.Y + deltaY < imageBounds.Top)
+                        cropRect.Y = imageBounds.Top;
+                    else if (includeHeight && cropRect.Y + cropRect.Height + deltaY > imageBounds.Bottom)
+                        cropRect.Y = imageBounds.Bottom - cropRect.Height;
+                    else if (cropRect.Y + deltaY > cropRect.Bottom - 1)
+                        cropRect.Y = cropRect.Bottom - 1;
                     else
-                        _cropRect.Y += deltaY;
+                        cropRect.Y += deltaY;
                 }
 
                 void AdjustWidthPlus()
                 {
-                    if (_cropRect.Width + deltaX < 1)
-                        _cropRect.Width = 1;
-                    else if (_cropRect.Width + deltaX > _transformedImageQuadrilateral.BoundingBox.Width)
-                        _cropRect.Width = _transformedImageQuadrilateral.BoundingBox.Width;
+                    if (cropRect.Width + deltaX < 1)
+                        cropRect.Width = 1;
+                    else if (cropRect.Width + deltaX > imageBounds.Width)
+                        cropRect.Width = imageBounds.Width;
                     else
-                        _cropRect.Width += deltaX;
+                        cropRect.Width += deltaX;
                 }
 
                 void AdjustWidthMinus()
                 {
-                    if (_cropRect.Width - deltaX < 1)
-                        _cropRect.Width = 1;
-                    else if (_cropRect.Width - deltaX > _transformedImageQuadrilateral.BoundingBox.Width)
-                        _cropRect.Width = _transformedImageQuadrilateral.BoundingBox.Width;
+                    if (cropRect.Width - deltaX < 1)
+                        cropRect.Width = 1;
+                    else if (cropRect.Width - deltaX > imageBounds.Width)
+                        cropRect.Width = imageBounds.Width;
                     else
-                        _cropRect.Width -= deltaX;
+                        cropRect.Width -= deltaX;
                 }
 
                 void AdjustHeightPlus()
                 {
-                    if (_cropRect.Height + deltaY < 1)
-                        _cropRect.Height = 1;
-                    else if (_cropRect.Height + deltaY > _transformedImageQuadrilateral.BoundingBox.Height)
-                        _cropRect.Height = _transformedImageQuadrilateral.BoundingBox.Height;
+                    if (cropRect.Height + deltaY < 1)
+                        cropRect.Height = 1;
+                    else if (cropRect.Height + deltaY > imageBounds.Height)
+                        cropRect.Height = imageBounds.Height;
                     else
-                        _cropRect.Height += deltaY;
+                        cropRect.Height += deltaY;
                 }
 
                 void AdjustHeightMinus()
                 {
-                    if (_cropRect.Height - deltaY < 1)
-                        _cropRect.Height = 1;
-                    else if (_cropRect.Height - deltaY > _transformedImageQuadrilateral.BoundingBox.Height)
-                        _cropRect.Height = _transformedImageQuadrilateral.BoundingBox.Height;
+                    if (cropRect.Height - deltaY < 1)
+                        cropRect.Height = 1;
+                    else if (cropRect.Height - deltaY > imageBounds.Height)
+                        cropRect.Height = imageBounds.Height;
                     else
-                        _cropRect.Height -= deltaY;
+                        cropRect.Height -= deltaY;
                 }
             }
             // If the pointer is captured for image translation,
             // move the image by the pointer delta.
-            else if (_isPointerCapturedForImage && point.Properties.IsLeftButtonPressed)
+            else if (layer.IsDragging && point.Properties.IsLeftButtonPressed)
             {
                 ImageTranslationX += deltaX;
                 ImageTranslationY += deltaY;
@@ -737,12 +757,12 @@ namespace ImageOrganizer.Controls
 
         private void PresentationBorder_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
         {
-            if (_isPointerCapturedForImage || _isPointerCapturedForCrop)
+            if (ActiveLayerInstance is not { } layer || layer.IsDragging || layer.IsCropping)
                 return;
 
             var point = e.GetCurrentPoint(PresentationBorder);
             var delta = point.Properties.MouseWheelDelta / 120.0; // Each notch of the wheel is 120 units
-            var prevScaledImageSourceRect = _transformedImageQuadrilateral.BoundingBox;
+            var prevScaledImageSourceRect = layer.TransformedImageQuadrilateral.BoundingBox;
 
             // Adjust the image rotation based on the mouse wheel delta
             if (AllowManualRotation && e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift))
@@ -754,7 +774,7 @@ namespace ImageOrganizer.Controls
             else if (AllowManualScaling && prevScaledImageSourceRect.Contains(point.Position))
             {
                 LinearImageScale += delta;
-                var boundingBox = _transformedImageQuadrilateral.BoundingBox;
+                var boundingBox = layer.TransformedImageQuadrilateral.BoundingBox;
                 var widthDelta = boundingBox.Width - prevScaledImageSourceRect.Width;
                 var heightDelta = boundingBox.Height - prevScaledImageSourceRect.Height;
                 var pointerOffsetX = point.Position.X - prevScaledImageSourceRect.GetCenterPoint().X;
@@ -766,113 +786,33 @@ namespace ImageOrganizer.Controls
         }
         #endregion
 
+        #region Private Properties
+        private ImagePresenterLayer? ActiveLayerInstance => ActiveLayer >= 0 && ActiveLayer < _layers.Count
+            ? _layers[ActiveLayer]
+            : null;
+        #endregion
+
         #region Private Methods
-        /// <summary>
-        /// Updates the transformation matrix based on the current image scale, rotation, and translation values
-        /// </summary>
-        private void UpdateTransform()
+        private void ApplyTransformPropertiesFromLayer(int layerIndex = 0)
         {
-            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null)
+            if (LockTransform ||
+                layerIndex < 0 ||
+                layerIndex >= _layers.Count ||
+                _layers[layerIndex].ImageFile is not ImageFile imageFile)
                 return;
 
-            var imageRect = new Rect(0, 0, imageFile.BoundingRect.Width, imageFile.BoundingRect.Height);
-
-            // Create transform matrix
-            var offsetX = (SwapChainPanel.ActualWidth - imageFile.BoundingRect.Width * ImageScale) / 2.0;
-            var offsetY = (SwapChainPanel.ActualHeight - imageFile.BoundingRect.Height * ImageScale) / 2.0;
-            var translation = Matrix3x2.CreateTranslation((float)(ImageTranslationX + offsetX), (float)(ImageTranslationY + offsetY));
-            var rotation = Matrix3x2.CreateRotation((float)(ImageRotation * Math.PI / 180.0), imageRect.GetCenterPoint().ToVector2());
-            var scale = Matrix3x2.CreateScale((float)ImageScale);
-            var transform = rotation * scale * translation;
-
-            // Get bounding rectangle for the transformed source image
-            var topLeft = Vector2.Transform(new Vector2((float)imageRect.Left, (float)imageRect.Top), transform);
-            var topRight = Vector2.Transform(new Vector2((float)imageRect.Right, (float)imageRect.Top), transform);
-            var bottomLeft = Vector2.Transform(new Vector2((float)imageRect.Left, (float)imageRect.Bottom), transform);
-            var bottomRight = Vector2.Transform(new Vector2((float)imageRect.Right, (float)imageRect.Bottom), transform);
-
-            // Adjust crop rectangle so that it stays aligned when the image is translated or scaled
-            var previousImageBounds = _transformedImageQuadrilateral.BoundingBox;
-            _transformedImageQuadrilateral = new Quadrilateral(topLeft, topRight, bottomRight, bottomLeft);
-            AdjustCropRectForImageBoundsChange(previousImageBounds, _transformedImageQuadrilateral.BoundingBox);
-
-            _transform = transform;
-        }
-
-        /// <summary>
-        /// Adjusts the crop rectangle to maintain its relative position and size when the image bounds change due to translation or scaling
-        /// </summary>
-        /// <param name="previousImageBounds">The bounding rectangle of the image before the transformation</param>
-        /// <param name="currentImageBounds">The bounding rectangle of the image after the transformation</param>
-        private void AdjustCropRectForImageBoundsChange(Rect previousImageBounds, Rect currentImageBounds)
-        {
-            if (!EnableCropMode ||
-                _cropRect.IsEmpty ||
-                previousImageBounds.IsEmpty ||
-                currentImageBounds.IsEmpty ||
-                previousImageBounds.Width <= 0 ||
-                previousImageBounds.Height <= 0 ||
-                currentImageBounds.Width <= 0 ||
-                currentImageBounds.Height <= 0)
-                return;
-
-            var left = currentImageBounds.Left + ((_cropRect.Left - previousImageBounds.Left) / previousImageBounds.Width * currentImageBounds.Width);
-            var top = currentImageBounds.Top + ((_cropRect.Top - previousImageBounds.Top) / previousImageBounds.Height * currentImageBounds.Height);
-            var right = currentImageBounds.Left + ((_cropRect.Right - previousImageBounds.Left) / previousImageBounds.Width * currentImageBounds.Width);
-            var bottom = currentImageBounds.Top + ((_cropRect.Bottom - previousImageBounds.Top) / previousImageBounds.Height * currentImageBounds.Height);
-
-            _cropRect = new Rect(left, top, right - left, bottom - top);
-        }
-
-        /// <summary>
-        /// Calculates the crop rectangle in the source image's coordinate space
-        /// </summary>
-        /// <returns>
-        /// The crop rectangle in the source image's coordinate space
-        /// </returns>
-        private Rect GetSourceCropRect()
-        {
-            if (ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null || _cropRect.IsEmpty)
-                return Rect.Empty;
-
-            if (!Matrix3x2.Invert(_transform, out var inverseTransform))
-                return Rect.Empty;
-
-            var topLeft = Vector2.Transform(new Vector2((float)_cropRect.Left, (float)_cropRect.Top), inverseTransform);
-            var topRight = Vector2.Transform(new Vector2((float)_cropRect.Right, (float)_cropRect.Top), inverseTransform);
-            var bottomRight = Vector2.Transform(new Vector2((float)_cropRect.Right, (float)_cropRect.Bottom), inverseTransform);
-            var bottomLeft = Vector2.Transform(new Vector2((float)_cropRect.Left, (float)_cropRect.Bottom), inverseTransform);
-
-            var sourceBounds = imageFile.BoundingRect;
-            var left = Math.Clamp(sourceBounds.Left + Math.Min(Math.Min(topLeft.X, topRight.X), Math.Min(bottomRight.X, bottomLeft.X)), sourceBounds.Left, sourceBounds.Right);
-            var top = Math.Clamp(sourceBounds.Top + Math.Min(Math.Min(topLeft.Y, topRight.Y), Math.Min(bottomRight.Y, bottomLeft.Y)), sourceBounds.Top, sourceBounds.Bottom);
-            var right = Math.Clamp(sourceBounds.Left + Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomRight.X, bottomLeft.X)), sourceBounds.Left, sourceBounds.Right);
-            var bottom = Math.Clamp(sourceBounds.Top + Math.Max(Math.Max(topLeft.Y, topRight.Y), Math.Max(bottomRight.Y, bottomLeft.Y)), sourceBounds.Top, sourceBounds.Bottom);
-
-            if (right <= left || bottom <= top)
-                return Rect.Empty;
-
-            return new Rect(left, top, right - left, bottom - top);
-        }
-
-        /// <summary>
-        /// Calculates the scale factor needed to fit the image within the SwapChainPanel while maintaining its aspect ratio
-        /// </summary>
-        /// <returns>
-        /// The scale factor needed to fit the image within the SwapChainPanel
-        /// </returns>
-        private double GetFitScale()
-        {
-            if (SwapChainPanel is null ||
-                ViewModel.ActiveElement is not ImageFile imageFile || imageFile is null ||
-                imageFile.BoundingRect.IsEmpty ||
-                imageFile.BoundingRect.IsZero ||
-                imageFile.BoundingRect.Width <= 0 ||
-                imageFile.BoundingRect.Height <= 0)
-                return 1.0;
-
-            return Math.Min(SwapChainPanel.ActualWidth / imageFile.BoundingRect.Width,
-                            SwapChainPanel.ActualHeight / imageFile.BoundingRect.Height);
+            if (imageFile.Transform == default)
+            {
+                ImageRotation = 0;
+                ScaleLayerToFit(layerIndex);
+            }
+            else
+            {
+                RelativeImageScale = imageFile.Transform.Scale;
+                ImageRotation = imageFile.Transform.Rotation;
+                ImageTranslationX = imageFile.Transform.TranslationX;
+                ImageTranslationY = imageFile.Transform.TranslationY;
+            }
         }
 
         private void SetCursor(bool isWithinImage, RectLocations cropRectProximity)
@@ -968,7 +908,6 @@ namespace ImageOrganizer.Controls
                     oldSwapChain?.Dispose();
                 }
 
-                ClearImage();
                 _bitmapCache.Dpi = SwapChainPanel.SwapChain.Dpi;
             }
         }
@@ -1107,18 +1046,14 @@ namespace ImageOrganizer.Controls
                 {
                     r._mediaIndex = 0;
                     r._mediaTotal = 0;
-                    r.ClearImage();
                 }
                 else if (m.NewValue is ImageFile imageFile)
                 {
                     var isAvailable = await r._bitmapCache.LoadImageAsync(r.SwapChainPanel.SwapChain.Device, imageFile);
                     if (isAvailable)
-                        r.DisplayCurrentImageFile();
+                        r.SetLayerToActiveImage(true);
                     else
-                    {
-                        r.ClearImage();
                         return;
-                    }
 
                     r._mediaIndex = imageFile.Parent.Children.IndexOf(imageFile);
                     r._mediaTotal = imageFile.Parent.Children.Count;
