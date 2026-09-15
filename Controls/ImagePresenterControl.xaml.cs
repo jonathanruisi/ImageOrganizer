@@ -43,6 +43,7 @@ namespace ImageOrganizer.Controls
     {
         #region Fields
         private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _renderTimer;
+        private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _autoAdvanceTimer;
         private readonly LruBitmapCache _bitmapCache;
         private readonly InputCursor _primaryCursor, _hoverCursor, _dragCursor;
         private readonly InputCursor _dragWECursor, _dragNSCursor, _dragNESWCursor, _dragNWSECursor;
@@ -80,6 +81,12 @@ namespace ImageOrganizer.Controls
             _renderTimer = DispatcherQueue.CreateTimer();
             _renderTimer.IsRepeating = true;
             _renderTimer.Tick += RenderTimer_Tick;
+
+            // Initialize auto-advance timer
+            _autoAdvanceTimer = DispatcherQueue.CreateTimer();
+            _autoAdvanceTimer.IsRepeating = true;
+            _autoAdvanceTimer.Interval = TimeSpan.FromMilliseconds(AutoAdvanceRate);
+            _autoAdvanceTimer.Tick += AutoAdvanceTimer_Tick;
 
             // Initialize bitmap cache
             _bitmapCache = new(CacheCapacity);
@@ -149,6 +156,25 @@ namespace ImageOrganizer.Controls
         #endregion
 
         #region Dependency Property Callbacks
+        private static void OnIsAutoAdvanceActiveChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            if ((bool)e.NewValue)
+                ip._autoAdvanceTimer.Start();
+            else
+                ip._autoAdvanceTimer.Stop();
+        }
+
+        private static void OnAutoAdvanceRateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            ip._autoAdvanceTimer.Interval = TimeSpan.FromMilliseconds((int)e.NewValue);
+        }
+
         private static void OnWindowDpiChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is not ImagePresenterControl ip)
@@ -306,6 +332,7 @@ namespace ImageOrganizer.Controls
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
         {
+            IsAutoAdvanceActive = false;
             _renderTimer.Stop();
             SwapChainPanel.RemoveFromVisualTree();
             SwapChainPanel.SwapChain = null;
@@ -386,6 +413,14 @@ namespace ImageOrganizer.Controls
         #endregion
 
         #region Event Handlers (Timers)
+        private void AutoAdvanceTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+        {
+            if (ViewModel.GeneralNextCommand.CanExecute(null))
+                ViewModel.GeneralNextCommand.Execute(null);
+            else
+                IsAutoAdvanceActive = false;
+        }
+
         private void RenderTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
         {
             using var ds = SwapChainPanel.SwapChain.CreateDrawingSession(Colors.Transparent);
