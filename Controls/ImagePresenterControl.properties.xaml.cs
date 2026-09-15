@@ -1,6 +1,8 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 
+using System.Collections.ObjectModel;
+
 namespace ImageOrganizer.Controls
 {
     public sealed partial class ImagePresenterControl
@@ -142,6 +144,30 @@ namespace ImageOrganizer.Controls
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(false));
 
+        public bool IsAutoAdvanceActive
+        {
+            get => (bool)GetValue(IsAutoAdvanceActiveProperty);
+            set => SetValue(IsAutoAdvanceActiveProperty, value);
+        }
+
+        public static readonly DependencyProperty IsAutoAdvanceActiveProperty =
+            DependencyProperty.Register(nameof(IsAutoAdvanceActive),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnIsAutoAdvanceActiveChanged));
+
+        public int AutoAdvanceRate
+        {
+            get => (int)GetValue(AutoAdvanceRateProperty);
+            set => SetValue(AutoAdvanceRateProperty, value);
+        }
+
+        public static readonly DependencyProperty AutoAdvanceRateProperty =
+            DependencyProperty.Register(nameof(AutoAdvanceRate),
+                                        typeof(int),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(500, OnAutoAdvanceRateChanged));
+
         public double SnapDistance
         {
             get => (double)GetValue(SnapDistanceProperty);
@@ -168,6 +194,18 @@ namespace ImageOrganizer.Controls
         #endregion
 
         #region Tool Properties
+        public int ActiveLayer
+        {
+            get => (int)GetValue(ActiveLayerProperty);
+            set => SetValue(ActiveLayerProperty, value);
+        }
+
+        public static readonly DependencyProperty ActiveLayerProperty =
+            DependencyProperty.Register(nameof(ActiveLayer),
+                                        typeof(int),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0, OnActiveLayerChanged));
+
         public bool EnableCropMode
         {
             get => (bool)GetValue(EnableCropModeProperty);
