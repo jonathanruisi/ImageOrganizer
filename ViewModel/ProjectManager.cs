@@ -47,6 +47,7 @@ namespace ImageOrganizer.ViewModel
             {
                 if (SetProperty(ref _activeElement, value, true))
                 {
+                    OnPropertyChanged(nameof(ActiveMediaMetadata));
                     GeneralPreviousCommand.NotifyCanExecuteChanged();
                     GeneralNextCommand.NotifyCanExecuteChanged();
                     GeneralDeleteCommand.NotifyCanExecuteChanged();
@@ -57,6 +58,12 @@ namespace ImageOrganizer.ViewModel
                 }
             }
         }
+
+        /// <summary>
+        /// Gets the <see cref="ActiveElement"/> as an <see cref="IMediaMetadata"/>,
+        /// or <see langword="null"/> if it does not implement the interface.
+        /// </summary>
+        public IMediaMetadata? ActiveMediaMetadata => _activeElement as IMediaMetadata;
         #endregion
 
         #region Constructor

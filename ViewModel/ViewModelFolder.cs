@@ -17,7 +17,7 @@ using Windows.System;
 namespace ImageOrganizer.ViewModel
 {
     [ViewModelType(nameof(ViewModelFolder))]
-    public sealed partial class ViewModelFolder : ViewModelNode, IViewModelStorageItem
+    public sealed partial class ViewModelFolder : ViewModelNode, IViewModelStorageItem, IMediaMetadata
     {
         #region Constants
         public static readonly string MetadataFileName = "folder_metadata";
@@ -28,6 +28,7 @@ namespace ImageOrganizer.ViewModel
         private bool _isReady;
         private bool _hasMetadata;
         private bool _hasUnrealizedChildren;
+        private int _rating;
         private readonly DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
         private StorageFolder? _folder;
         private StorageFile? _metadataFile;
@@ -72,6 +73,13 @@ namespace ImageOrganizer.ViewModel
             private set => SetProperty(ref _metadataFile, value);
         }
 
+        [ViewModelProperty(nameof(Rating), XmlNodeType.Element)]
+        public int Rating
+        {
+            get => _rating;
+            set => SetProperty(ref _rating, value);
+        }
+
         public bool IsReady
         {
             get => _isReady;
@@ -105,6 +113,7 @@ namespace ImageOrganizer.ViewModel
             _folder = null;
             _metadataFile = null;
             _isReady = false;
+            _rating = 0;
             _hasUnrealizedChildren = true;
             Name = path.Split(@"\", StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? string.Empty;
         }
@@ -117,6 +126,7 @@ namespace ImageOrganizer.ViewModel
             _folder = folder;
             _metadataFile = null;
             _isReady = false;
+            _rating = 0;
             _hasUnrealizedChildren = true;
             Name = folder?.DisplayName ?? string.Empty;
         }

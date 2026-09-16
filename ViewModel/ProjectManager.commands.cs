@@ -58,6 +58,12 @@ namespace ImageOrganizer.ViewModel
             }
         };
 
+        public XamlUICommand BrowserWriteMetadataForCurrentFolderCommand { get; private set; } = new XamlUICommand()
+        {
+            Label = "Write Metadata",
+            Description = "Write metadata for the current folder"
+        };
+
         public XamlUICommand ToolsToggleFlag1Command { get; private set; } = new XamlUICommand()
         {
             Label = "Toggle Flag 1",
@@ -216,6 +222,17 @@ namespace ImageOrganizer.ViewModel
         {
             if (await(SystemBrowserFolder as ViewModelFolder)!.SaveMetadataAsync() == false)
                 App.ShowMessageBoxAsync("Save Error", "Error saving image sequence metadata");
+        }
+
+        private void BrowserWriteMetadataForCurrentFolderCommand_CanExecuteRequested(XamlUICommand sender, CanExecuteRequestedEventArgs args)
+        {
+            args.CanExecute = ActiveElement is ViewModelFolder;
+        }
+
+        private async void BrowserWriteMetadataForCurrentFolderCommand_ExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
+        {
+            if (await (ActiveElement as ViewModelFolder)!.SaveMetadataAsync() == false)
+                App.ShowMessageBoxAsync("Save Error", "Error saving metadata");
         }
 
         private void ToolsToggleFlagCommand_CanExecuteRequested(XamlUICommand sender, CanExecuteRequestedEventArgs args)
@@ -537,7 +554,15 @@ namespace ImageOrganizer.ViewModel
             BrowserCreateImageSequenceCommand.KeyboardAccelerators.Add(new KeyboardAccelerator
             {
                 Key = VirtualKey.I,
-                Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift
+                Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
+                IsEnabled = true
+            });
+
+            BrowserWriteMetadataForCurrentFolderCommand.KeyboardAccelerators.Add(new KeyboardAccelerator
+            {
+                Key = VirtualKey.S,
+                Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift,
+                IsEnabled = true
             });
 
             ToolsToggleFlag1Command.KeyboardAccelerators.Add(new KeyboardAccelerator
@@ -618,6 +643,11 @@ namespace ImageOrganizer.ViewModel
                 BrowserCreateImageSequenceCommand_CanExecuteRequested;
             BrowserCreateImageSequenceCommand.ExecuteRequested +=
                 BrowserCreateImageSequenceCommand_ExecuteRequested;
+
+            BrowserWriteMetadataForCurrentFolderCommand.CanExecuteRequested +=
+                BrowserWriteMetadataForCurrentFolderCommand_CanExecuteRequested;
+            BrowserWriteMetadataForCurrentFolderCommand.ExecuteRequested +=
+                BrowserWriteMetadataForCurrentFolderCommand_ExecuteRequested;
 
             ToolsToggleFlag1Command.CanExecuteRequested +=
                 ToolsToggleFlagCommand_CanExecuteRequested;

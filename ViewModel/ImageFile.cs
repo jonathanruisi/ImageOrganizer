@@ -58,10 +58,11 @@ namespace ImageOrganizer.ViewModel
     }
 
     [ViewModelType(nameof(ImageFile))]
-    public sealed partial class ImageFile : ViewModelFile
+    public sealed partial class ImageFile : ViewModelFile, IMediaMetadata
     {
         #region Fields
         private bool _isCached;
+        private int _rating;
         private CanvasBitmap? _bitmap;
         private double _blurScore = -1;
         private string? _checksum;
@@ -89,6 +90,13 @@ namespace ImageOrganizer.ViewModel
         {
             get => _transform;
             set => SetProperty(ref _transform, value, true);
+        }
+
+        [ViewModelProperty(nameof(Rating), XmlNodeType.Element)]
+        public int Rating
+        {
+            get => _rating;
+            set => SetProperty(ref _rating, value);
         }
 
         public bool IsCached
@@ -133,6 +141,7 @@ namespace ImageOrganizer.ViewModel
 
         public ImageFile(string path) : base(path)
         {
+            _rating = 0;
             _isCached = false;
             _bitmap = null;
             _originalSize = Size.Empty;
@@ -142,6 +151,7 @@ namespace ImageOrganizer.ViewModel
 
         public ImageFile(StorageFile file) : base(file)
         {
+            _rating = 0;
             _isCached = false;
             _bitmap = null;
             _originalSize = Size.Empty;
@@ -196,12 +206,8 @@ namespace ImageOrganizer.ViewModel
                     ds.DrawImage(sourceBitmap, 0, 0, BoundingRect);
                 }
 
-                if (Bitmap is not null)
-                {
-                    Bitmap.Dispose();
-                    Bitmap = null;
-                }
-
+                Bitmap?.Dispose();
+                Bitmap = null;
                 Bitmap = rt;
             }
             catch

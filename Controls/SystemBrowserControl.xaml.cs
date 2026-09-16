@@ -79,13 +79,9 @@ namespace ImageOrganizer.Controls
 
             if (selectedItems.Count == 1)
             {
-                if (selectedItems[0] is ImageFile image)
+                if (selectedItems[0] is IMediaMetadata)
                 {
-                    ViewModel.ActiveElement = image;
-                }
-                else if (selectedItems[0] is ViewModelFolder folder)
-                {
-
+                    ViewModel.ActiveElement = selectedItems[0];
                 }
                 SystemBrowserListView.ScrollIntoView(selectedItems[0]);
             }

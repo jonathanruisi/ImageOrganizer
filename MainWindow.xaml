@@ -85,11 +85,12 @@
                              Padding="0">
                     <MenuFlyoutItem Command="{x:Bind ViewModel.GeneralPreviousCommand}"/>
                     <MenuFlyoutItem Command="{x:Bind ViewModel.GeneralNextCommand}"/>
+                    <MenuFlyoutSeparator/>
+                    <MenuFlyoutItem Command="{x:Bind ViewModel.BrowserWriteMetadataForCurrentFolderCommand}"/>
                 </MenuBarItem>
                 <MenuBarItem Title="Image"
                              Margin="0"
                              Padding="0">
-                    <MenuFlyoutItem Command="{x:Bind ViewModel.BrowserCreateImageSequenceCommand}"/>
                     <MenuFlyoutItem Command="{x:Bind ViewModel.SaveImageTransformCommand}"/>
                 </MenuBarItem>
                 <MenuBarItem Title="Tools"
@@ -97,6 +98,16 @@
                              Padding="0">
                     <MenuFlyoutItem Command="{x:Bind ViewModel.ToolsMarkDuplicatesInCurrentFolderCommand}"/>
                     <MenuFlyoutSeparator/>
+                    <MenuFlyoutSubItem Text="Flag Items">
+                        <MenuFlyoutItem Command="{x:Bind ViewModel.ToolsToggleFlag1Command}"
+                                        CommandParameter="1"/>
+                        <MenuFlyoutItem Command="{x:Bind ViewModel.ToolsToggleFlag2Command}"
+                                        CommandParameter="2"/>
+                        <MenuFlyoutItem Command="{x:Bind ViewModel.ToolsToggleFlag3Command}"
+                                        CommandParameter="3"/>
+                        <MenuFlyoutItem Command="{x:Bind ViewModel.ToolsToggleFlag4Command}"
+                                        CommandParameter="4"/>                        
+                    </MenuFlyoutSubItem>
                     <MenuFlyoutSubItem Text="Delete Flagged Items">
                         <MenuFlyoutItem Command="{x:Bind ViewModel.ToolsDeleteFlag1ItemsCommand}"
                                         CommandParameter="1"/>

@@ -3,11 +3,32 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:ImageOrganizer"
-    xmlns:toolkit_converters="using:CommunityToolkit.WinUI.Converters">
+    xmlns:toolkit_converters="using:CommunityToolkit.WinUI.Converters"
+    xmlns:xaml="using:Microsoft.UI.Xaml">
 
     <!-- Converters -->
     <toolkit_converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    <local:RatingToSolidColorBrushConverter x:Key="RatingToBrushConverter"/>
+    <local:RatingAdjustmentConverter x:Key="RatingConverter"/>
     <local:DecimalTextConverter x:Key="DecimalTextConverter"/>
     <local:ImageTransformToVisibilityConverter x:Key="ImageTransformToVisibilityConverter"/>
     <local:FlagMaskConverter x:Key="FlagMaskConverter"/>
+
+    <toolkit_converters:EmptyObjectToObjectConverter x:Key="ObjectToVisibilityConverter">
+        <toolkit_converters:EmptyObjectToObjectConverter.EmptyValue>
+            <xaml:Visibility>Collapsed</xaml:Visibility>
+        </toolkit_converters:EmptyObjectToObjectConverter.EmptyValue>
+        <toolkit_converters:EmptyObjectToObjectConverter.NotEmptyValue>
+            <xaml:Visibility>Visible</xaml:Visibility>
+        </toolkit_converters:EmptyObjectToObjectConverter.NotEmptyValue>
+    </toolkit_converters:EmptyObjectToObjectConverter>
+
+    <toolkit_converters:EmptyObjectToObjectConverter x:Key="ObjectToBooleanConverter">
+        <toolkit_converters:EmptyObjectToObjectConverter.EmptyValue>
+            <x:Boolean>False</x:Boolean>
+        </toolkit_converters:EmptyObjectToObjectConverter.EmptyValue>
+        <toolkit_converters:EmptyObjectToObjectConverter.NotEmptyValue>
+            <x:Boolean>True</x:Boolean>
+        </toolkit_converters:EmptyObjectToObjectConverter.NotEmptyValue>
+    </toolkit_converters:EmptyObjectToObjectConverter>
 </ResourceDictionary>
