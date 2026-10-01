@@ -246,6 +246,11 @@ namespace ImageOrganizer
                 r.MainInfoBar.IsOpen = true;
             });
 
+            messenger.Register<MainWindow, CloseInfoBarMessage>(this, (r, m) =>
+            {
+                r.MainInfoBar.IsOpen = false;
+            });
+
             messenger.Register<MainWindow, ToggleFullscreenMessage>(this, (r, m) =>
             {
                 if (r.PresenterKind != AppWindowPresenterKind.FullScreen)

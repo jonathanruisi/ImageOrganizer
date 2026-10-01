@@ -418,7 +418,7 @@ namespace ImageOrganizer.ViewModel
                         return $"{rect.X},{rect.Y},{rect.Width},{rect.Height}";
                 }
             }
-            return null;
+            return base.CustomPropertyWriter(propertyName, value, args);
         }
         #endregion
     }

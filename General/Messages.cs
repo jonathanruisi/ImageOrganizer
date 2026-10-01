@@ -29,6 +29,11 @@ namespace ImageOrganizer
 
     }
 
+    public class CloseInfoBarMessage
+    {
+
+    }
+
     public class SetInfoBarMessage
     {
         public string Title { get; set; }

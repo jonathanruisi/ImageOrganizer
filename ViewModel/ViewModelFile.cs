@@ -22,7 +22,7 @@ namespace ImageOrganizer.ViewModel
         #endregion
 
         #region Properties
-        [ViewModelProperty(nameof(Path), XmlNodeType.Element)]
+        [ViewModelProperty(nameof(Path), XmlNodeType.Element, false, true)]
         public string Path
         {
             get => _path;
@@ -114,6 +114,18 @@ namespace ImageOrganizer.ViewModel
                 throw new InvalidOperationException($"{contentTypeString} file expected");
 
             return true;
+        }
+        #endregion
+
+        #region Method Overrides (ViewModelElement)
+        protected override string? CustomPropertyWriter(string propertyName, object value, params string[] args)
+        {
+            // Only the file name is written to metadata so it remains valid
+            // if the containing folder is moved.
+            if (propertyName == nameof(Path) && value is string path)
+                return System.IO.Path.GetFileName(path);
+
+            return base.CustomPropertyWriter(propertyName, value, args);
         }
         #endregion
     }

@@ -364,7 +364,7 @@ namespace ImageOrganizer.Controls
             DependencyProperty.Register(nameof(AutoCacheThreshold),
                                         typeof(int),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(25));
+                                        new PropertyMetadata(75));
 
         public double WindowDpi
         {

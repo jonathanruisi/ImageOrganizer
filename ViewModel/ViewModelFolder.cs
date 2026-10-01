@@ -2,6 +2,8 @@
 
 using JLR.Utility.WinUI.ViewModel;
 
+using Microsoft.UI.Xaml.Controls;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -36,7 +38,7 @@ namespace ImageOrganizer.ViewModel
         #endregion
 
         #region Properties
-        [ViewModelProperty(nameof(Path), XmlNodeType.Element)]
+        [ViewModelProperty(nameof(Path), XmlNodeType.Element, false, true)]
         public string Path
         {
             get => _path;
@@ -169,8 +171,14 @@ namespace ImageOrganizer.ViewModel
 
             if (HasMetadata)
             {
+                var currentPath = Path;
                 var reader = await GetXmlReaderForFileAsync(MetadataFile);
                 ReadXml(reader);
+
+                // The metadata file only contains relative paths,
+                // so restore this folder's actual path and resolve all child paths against it.
+                Path = currentPath;
+                ResolveRelativeChildPaths();
             }
 
             if (Folder?.Path == Path && Folder?.FolderRelativeId == Id && (!HasMetadata || MetadataFile?.Path == metadataPath))
@@ -207,6 +215,7 @@ namespace ImageOrganizer.ViewModel
                 return true;
 
             //Debug.WriteLine($"Realizing Children: {Name}");
+
             if (Folder is null)
                 return false;
             var items = await Folder.GetItemsAsync();
@@ -214,6 +223,15 @@ namespace ImageOrganizer.ViewModel
             foreach (var subFolder in items.OfType<StorageFolder>())
             {
                 var newFolder = new ViewModelFolder(subFolder);
+
+                Messenger.Send(new SetInfoBarMessage()
+                {
+                    Title = "Realizing Children:",
+                    Message = newFolder.Name,
+                    Severity = InfoBarSeverity.Informational,
+                    IsCloseable = false
+                });
+
                 await newFolder.MakeReadyAsync();
                 //Debug.WriteLine($"Adding Directory: {newFolder.Name}");
                 if (Children.Where(c => c is ViewModelFolder vf && vf.Id == newFolder.Id).Any() == false)
@@ -251,6 +269,7 @@ namespace ImageOrganizer.ViewModel
                 await task;
             }
 
+            Messenger.Send(new CloseInfoBarMessage());
             HasUnrealizedChildren = false;
             return true;
         }
@@ -436,9 +455,37 @@ namespace ImageOrganizer.ViewModel
 
             return null;
         }
+
+        protected override string? CustomPropertyWriter(string propertyName, object value, params string[] args)
+        {
+            // Only paths relative to the containing folder are written to metadata,
+            // so the metadata remains valid if the folder is moved.
+            if (propertyName == nameof(Path) && value is string path)
+                return System.IO.Path.GetFileName(path.TrimEnd(System.IO.Path.DirectorySeparatorChar));
+
+            return base.CustomPropertyWriter(propertyName, value, args);
+        }
         #endregion
 
         #region Private Methods
+        private void ResolveRelativeChildPaths()
+        {
+            foreach (var child in Children)
+            {
+                switch (child)
+                {
+                    case ViewModelFolder folder:
+                        if (!System.IO.Path.IsPathRooted(folder.Path))
+                            folder.Path = System.IO.Path.Combine(Path, folder.Path);
+                        folder.ResolveRelativeChildPaths();
+                        break;
+                    case ViewModelFile file when !System.IO.Path.IsPathRooted(file.Path):
+                        file.Path = System.IO.Path.Combine(Path, file.Path);
+                        break;
+                }
+            }
+        }
+
         private void EnableFileSystemWatcher()
         {
             //Debug.WriteLine($"Enabling FSW for {Name}");
