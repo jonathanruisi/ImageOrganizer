@@ -51,7 +51,7 @@ namespace ImageOrganizer
         private static ServiceProvider ConfigureServices()
         {
             var services = new ServiceCollection();
-            services.AddSingleton<IMessenger>(StrongReferenceMessenger.Default);
+            services.AddSingleton<IMessenger>(WeakReferenceMessenger.Default);
             services.AddSingleton<ProjectManager>();
             return services.BuildServiceProvider();
         }
