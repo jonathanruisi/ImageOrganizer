@@ -230,7 +230,9 @@
                                         AlignmentGridPrimaryBrush="White"
                                         AlignmentGridSecondaryBrush="Black"
                                         AlignmentGridThickness="3"
-                                        CropRectangleBrush="White"/>
+                                        CropRectangleBrush="White"
+                                        SubjectBrush="White"
+                                        SelectedSubjectBrush="{ThemeResource AccentFillColorDefaultBrush}"/>
 
         <!--Info Bar-->
         <InfoBar x:Name="MainInfoBar"

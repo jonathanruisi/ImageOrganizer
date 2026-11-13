@@ -218,6 +218,97 @@ namespace ImageOrganizer.Controls
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(false, OnEnableCropModeChanged));
 
+        /// <summary>
+        /// Gets or sets whether the people in the displayed image are detected and can be selected.
+        /// </summary>
+        /// <remarks>Subject selection mode and crop mode are mutually exclusive.</remarks>
+        public bool EnableSubjectSelectionMode
+        {
+            get => (bool)GetValue(EnableSubjectSelectionModeProperty);
+            set => SetValue(EnableSubjectSelectionModeProperty, value);
+        }
+
+        public static readonly DependencyProperty EnableSubjectSelectionModeProperty =
+            DependencyProperty.Register(nameof(EnableSubjectSelectionMode),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnEnableSubjectSelectionModeChanged));
+
+        /// <summary>
+        /// Gets or sets whether selected subjects remain selected when another image is displayed.
+        /// </summary>
+        /// <remarks>
+        /// A subject remains selected if a person who looks the same, going by
+        /// their clothing and build, is detected anywhere in the new image.
+        /// A selected person who is absent from an image is remembered, and selected again in whichever
+        /// later image they reappear in, unless forgotten with <see cref="ForgetAbsentSubjects"/>.
+        /// Clearing this property forgets them too.
+        /// </remarks>
+        public bool KeepSubjectSelection
+        {
+            get => (bool)GetValue(KeepSubjectSelectionProperty);
+            set => SetValue(KeepSubjectSelectionProperty, value);
+        }
+
+        public static readonly DependencyProperty KeepSubjectSelectionProperty =
+            DependencyProperty.Register(nameof(KeepSubjectSelection),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnKeepSubjectSelectionChanged));
+
+        /// <summary>
+        /// Gets or sets how alike a person must look to a subject of the previous image, on a scale that
+        /// reaches 1 for an identical appearance, for them to be taken as the same person when the selection
+        /// is carried over. See <see cref="KeepSubjectSelection"/>.
+        /// </summary>
+        /// <remarks>
+        /// A higher value makes it less likely that a selection passes to someone who looks similar, such as
+        /// a person in the same uniform, and more likely that it is lost when a person's appearance changes,
+        /// such as by their turning around. Useful values lie between about 0.4 and 0.7.
+        /// </remarks>
+        public double SubjectMatchSimilarity
+        {
+            get => (double)GetValue(SubjectMatchSimilarityProperty);
+            set => SetValue(SubjectMatchSimilarityProperty, value);
+        }
+
+        public static readonly DependencyProperty SubjectMatchSimilarityProperty =
+            DependencyProperty.Register(nameof(SubjectMatchSimilarity),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0.55));
+
+        /// <summary>
+        /// Gets or sets whether the view zooms in on the selected subjects
+        /// and rotates the image so that they appear upright.
+        /// </summary>
+        public bool FrameSelectedSubjects
+        {
+            get => (bool)GetValue(FrameSelectedSubjectsProperty);
+            set => SetValue(FrameSelectedSubjectsProperty, value);
+        }
+
+        public static readonly DependencyProperty FrameSelectedSubjectsProperty =
+            DependencyProperty.Register(nameof(FrameSelectedSubjects),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnFrameSelectedSubjectsChanged));
+
+        /// <summary>
+        /// Gets a description of the current state of subject detection and selection.
+        /// </summary>
+        public string SubjectStatusText
+        {
+            get => (string)GetValue(SubjectStatusTextProperty);
+            private set => SetValue(SubjectStatusTextProperty, value);
+        }
+
+        public static readonly DependencyProperty SubjectStatusTextProperty =
+            DependencyProperty.Register(nameof(SubjectStatusText),
+                                        typeof(string),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(string.Empty));
+
         public bool OverlayPreviousImage
         {
             get => (bool)GetValue(OverlayPreviousImageProperty);
@@ -304,6 +395,48 @@ namespace ImageOrganizer.Controls
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(5.0));
 
+        /// <summary>
+        /// Gets or sets the brush used to outline detected subjects. White is used if no brush is set.
+        /// </summary>
+        public Brush SubjectBrush
+        {
+            get => (Brush)GetValue(SubjectBrushProperty);
+            set => SetValue(SubjectBrushProperty, value);
+        }
+
+        public static readonly DependencyProperty SubjectBrushProperty =
+            DependencyProperty.Register(nameof(SubjectBrush),
+                                        typeof(Brush),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(null, OnCanvasBrushChanged));
+
+        /// <summary>
+        /// Gets or sets the brush used to highlight selected subjects. Blue is used if no brush is set.
+        /// </summary>
+        public Brush SelectedSubjectBrush
+        {
+            get => (Brush)GetValue(SelectedSubjectBrushProperty);
+            set => SetValue(SelectedSubjectBrushProperty, value);
+        }
+
+        public static readonly DependencyProperty SelectedSubjectBrushProperty =
+            DependencyProperty.Register(nameof(SelectedSubjectBrush),
+                                        typeof(Brush),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(null, OnCanvasBrushChanged));
+
+        public double SubjectOutlineThickness
+        {
+            get => (double)GetValue(SubjectOutlineThicknessProperty);
+            set => SetValue(SubjectOutlineThicknessProperty, value);
+        }
+
+        public static readonly DependencyProperty SubjectOutlineThicknessProperty =
+            DependencyProperty.Register(nameof(SubjectOutlineThickness),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(3.0));
+
         public float MaskOpacity
         {
             get => (float)GetValue(MaskOpacityProperty);
@@ -315,6 +448,36 @@ namespace ImageOrganizer.Controls
                                         typeof(float),
                                         typeof(ImagePresenterControl),
                                         new PropertyMetadata(0.5f));
+
+        /// <summary>
+        /// Shadow adjustment applied to the displayed image, in the range [-1, 1]. 0 leaves shadows unchanged.
+        /// </summary>
+        public double ImageShadows
+        {
+            get => (double)GetValue(ImageShadowsProperty);
+            set => SetValue(ImageShadowsProperty, value);
+        }
+
+        public static readonly DependencyProperty ImageShadowsProperty =
+            DependencyProperty.Register(nameof(ImageShadows),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0.0, OnImageToneAdjustmentChanged));
+
+        /// <summary>
+        /// Highlight adjustment applied to the displayed image, in the range [-1, 1]. 0 leaves highlights unchanged.
+        /// </summary>
+        public double ImageHighlights
+        {
+            get => (double)GetValue(ImageHighlightsProperty);
+            set => SetValue(ImageHighlightsProperty, value);
+        }
+
+        public static readonly DependencyProperty ImageHighlightsProperty =
+            DependencyProperty.Register(nameof(ImageHighlights),
+                                        typeof(double),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(0.0, OnImageToneAdjustmentChanged));
 
         public Visibility UpperToolbarVisibility
         {

@@ -10,6 +10,7 @@ using JLR.Utility.WinUI.ViewModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Brushes;
+using Microsoft.Graphics.Canvas.Effects;
 using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.UI;
 using Microsoft.UI.Input;
@@ -54,6 +55,7 @@ namespace ImageOrganizer.Controls
         private Point _previousPointerPosition = new(0, 0);
         private ICanvasBrush? _alignmentGridPrimaryBrush, _alignmentGridSecondaryBrush, _cropRectangleBrush;
         private CanvasGeometry? _alignmentGridPrimaryGeometry, _alignmentGridSecondaryGeometry;
+        private readonly HighlightsAndShadowsEffect _toneEffect = new();
         private Size _alignmentGridGeometrySize;
         private float _alignmentGridGeometryThickness;
         #endregion
@@ -108,11 +110,16 @@ namespace ImageOrganizer.Controls
                 ViewModel.ActiveElement is not ImageFile imageFile)
                 return;
 
+            var isActiveLayer = layerIndex == ActiveLayer;
             _layers[layerIndex] = new ImagePresenterLayer(this, imageFile);
             if (makeActive)
                 ActiveLayer = layerIndex;
 
-            ApplyTransformPropertiesFromLayer(layerIndex);
+            // While the view is framing subjects that may also be in the new image, it is left as
+            // it is until they have been looked for, rather than showing each image's own view in between
+            _isSubjectViewDeferred = isActiveLayer && IsFramingTrackedSubjects;
+            if (!_isSubjectViewDeferred)
+                ApplyTransformPropertiesFromLayer(layerIndex);
 
             // The new layer starts with an identity transform and a zero quadrilateral.
             // If applying the transform properties above did not change any dependency property
@@ -123,6 +130,11 @@ namespace ImageOrganizer.Controls
             AllowManualScaling = true;
             AllowManualRotation = true;
             EnableCropMode = false;
+
+            // The subjects belong to the image of the active layer.
+            // If the active layer changed above, they have already been refreshed.
+            if (isActiveLayer)
+                RefreshSubjects();
         }
 
         public void RemoveAllLayers()
@@ -142,6 +154,7 @@ namespace ImageOrganizer.Controls
 
             // Add the background layer back to the list
             _layers.Add(new ImagePresenterLayer(this));
+            RefreshSubjects();
         }
 
         public void ScaleLayerToFit(int layerIndex = 0)
@@ -152,6 +165,15 @@ namespace ImageOrganizer.Controls
             ImageScale = _layers[layerIndex].GetFitScale(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight);
             ImageTranslationX = 0;
             ImageTranslationY = 0;
+        }
+
+        /// <summary>
+        /// Resets the shadow and highlight adjustments to their neutral values.
+        /// </summary>
+        public void ResetToneAdjustments()
+        {
+            ImageShadows = 0;
+            ImageHighlights = 0;
         }
         #endregion
 
@@ -240,6 +262,24 @@ namespace ImageOrganizer.Controls
                 ip.ActiveLayerInstance?.UpdateTransform();
         }
 
+        private static void OnImageToneAdjustmentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            var clamped = Math.Clamp((double)e.NewValue, -1.0, 1.0);
+            if (clamped != (double)e.NewValue)
+            {
+                ip.SetValue(e.Property, clamped);
+                return;
+            }
+
+            if (e.Property == ImageShadowsProperty)
+                ip._toneEffect.Shadows = (float)clamped;
+            else if (e.Property == ImageHighlightsProperty)
+                ip._toneEffect.Highlights = (float)clamped;
+        }
+
         private static void OnCanvasBrushChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is not ImagePresenterControl ip || ip.SwapChainPanel.SwapChain is null)
@@ -263,6 +303,10 @@ namespace ImageOrganizer.Controls
                 ip._cropRectangleBrush = null;
                 ip._cropRectangleBrush = ip.CropRectangleBrush.CreateCanvasBrush(ip.SwapChainPanel.SwapChain.Device);
             }
+            else if (e.Property == SubjectBrushProperty || e.Property == SelectedSubjectBrushProperty)
+            {
+                ip.EnsureSubjectBrushes(recreate: true);
+            }
         }
 
         private static void OnCacheCapacityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -277,6 +321,10 @@ namespace ImageOrganizer.Controls
         {
             if (d is not ImagePresenterControl ip)
                 return;
+
+            // The crop rectangle covers the image, so it would intercept clicks meant for subjects
+            if (ip.EnableCropMode)
+                ip.EnableSubjectSelectionMode = false;
 
             if (ip.ActiveLayerInstance is not { } layer)
                 return;
@@ -296,6 +344,36 @@ namespace ImageOrganizer.Controls
             }
         }
 
+        private static void OnEnableSubjectSelectionModeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            if (ip.EnableSubjectSelectionMode)
+                ip.EnableCropMode = false;
+
+            ip.UpdateTrackedSubjects();
+            ip.RefreshSubjects();
+        }
+
+        private static void OnKeepSubjectSelectionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            ip.UpdateTrackedSubjects();
+            ip.UpdateSubjectStatus();
+        }
+
+        private static void OnFrameSelectedSubjectsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            // Turning framing off returns an image that was framed to its own view
+            ip.UpdateSubjectFraming(restoreView: !ip.FrameSelectedSubjects && ip._subjects.Any(s => s.IsSelected));
+        }
+
         private static void OnOverlayPreviousImageChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is not ImagePresenterControl ip)
@@ -308,6 +386,7 @@ namespace ImageOrganizer.Controls
                 return;
 
             ip.ActiveLayerInstance?.UpdateTransform();
+            ip.RefreshSubjects();
         }
         #endregion
 
@@ -342,6 +421,14 @@ namespace ImageOrganizer.Controls
             _alignmentGridSecondaryGeometry?.Dispose();
             _alignmentGridSecondaryGeometry = null;
 
+            EnableSubjectSelectionMode = false;
+            _subjectDetector?.Dispose();
+            _subjectDetector = null;
+            _subjectPoseEstimator?.Dispose();
+            _subjectPoseEstimator = null;
+            _subjectAppearanceEncoder?.Dispose();
+            _subjectAppearanceEncoder = null;
+
             _bitmapCache.Dispose();
         }
 
@@ -355,6 +442,11 @@ namespace ImageOrganizer.Controls
                 if (EnableCropMode)
                 {
                     EnableCropMode = false;
+                    e.Handled = true;
+                }
+                else if (EnableSubjectSelectionMode)
+                {
+                    EnableSubjectSelectionMode = false;
                     e.Handled = true;
                 }
             }
@@ -409,6 +501,24 @@ namespace ImageOrganizer.Controls
                     e.Handled = true;
                 }
             }
+            else if (sender.Key == VirtualKey.P)
+            {
+                if (ActiveLayerInstance?.ImageFile is not null)
+                {
+                    EnableSubjectSelectionMode = !EnableSubjectSelectionMode;
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void ButtonResetToneAdjustments_Click(object sender, RoutedEventArgs e)
+        {
+            ResetToneAdjustments();
+        }
+
+        private void ButtonForgetAbsentSubjects_Click(object sender, RoutedEventArgs e)
+        {
+            ForgetAbsentSubjects();
         }
         #endregion
 
@@ -434,8 +544,18 @@ namespace ImageOrganizer.Controls
             }
 
             ds.Transform = layer.Transform;
-            ds.DrawImage(bitmap, 0, 0);
+            if (_toneEffect.Shadows == 0f && _toneEffect.Highlights == 0f)
+            {
+                ds.DrawImage(bitmap, 0, 0);
+            }
+            else
+            {
+                _toneEffect.Source = bitmap;
+                ds.DrawImage(_toneEffect, 0, 0);
+            }
             ds.Transform = Matrix3x2.Identity;
+
+            DrawSubjects(ds, layer);
 
             // Determine the number of different flag adornments needed
             const float adornDistFromEdge = 25f;
@@ -555,6 +675,7 @@ namespace ImageOrganizer.Controls
             if (ActiveLayerInstance is { } layer && (layer.IsDragging || layer.IsCropping))
                 return;
 
+            _hoveredSubject = null;
             ProtectedCursor = _primaryCursor;
         }
 
@@ -569,6 +690,8 @@ namespace ImageOrganizer.Controls
 
             if (point.Properties.IsLeftButtonPressed)
             {
+                BeginSubjectClick(layer, point.Position, e.KeyModifiers);
+
                 // Left-click occured on or within the crop rectangle,
                 // so capture the pointer for cropping
                 if (EnableCropMode && cropRectProximity != RectLocations.Outside)
@@ -614,6 +737,8 @@ namespace ImageOrganizer.Controls
             var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
             var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
+            CompleteSubjectClick(layer, point.Position);
+            UpdateHoveredSubject(layer, point.Position);
             SetCursor(isWithinImage, cropRectProximity);
             layer.IsDragging = false;
             layer.IsCropping = false;
@@ -628,6 +753,8 @@ namespace ImageOrganizer.Controls
             var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
             var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
+            _pressedSubject = null;
+            UpdateHoveredSubject(layer, point.Position);
             SetCursor(isWithinImage, cropRectProximity);
             layer.IsDragging = false;
             layer.IsCropping = false;
@@ -642,6 +769,8 @@ namespace ImageOrganizer.Controls
             var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
             var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
+            _pressedSubject = null;
+            UpdateHoveredSubject(layer, point.Position);
             SetCursor(isWithinImage, cropRectProximity);
             layer.IsDragging = false;
             layer.IsCropping = false;
@@ -784,6 +913,7 @@ namespace ImageOrganizer.Controls
             // update the cursor based on its position relative to the image and crop rectangle.
             else
             {
+                UpdateHoveredSubject(layer, point.Position);
                 SetCursor(isWithinImage, cropRectProximity);
             }
 
@@ -818,6 +948,9 @@ namespace ImageOrganizer.Controls
                 ImageTranslationX -= (widthDelta * (pointerOffsetX / (prevScaledImageSourceRect.Width / 2))) / 2;
                 ImageTranslationY -= (heightDelta * (pointerOffsetY / (prevScaledImageSourceRect.Height / 2))) / 2;
             }
+
+            // The image may have moved under the stationary pointer
+            UpdateHoveredSubject(layer, point.Position);
         }
         #endregion
 
@@ -886,6 +1019,13 @@ namespace ImageOrganizer.Controls
                             ProtectedCursor = _dragNESWCursor;
                         break;
                 }
+            }
+            // The pointer is over a detected subject, which can be clicked to select it,
+            // so set the cursor to the primary (hand) cursor
+            else if (_hoveredSubject is not null)
+            {
+                if (ProtectedCursor != _primaryCursor)
+                    ProtectedCursor = _primaryCursor;
             }
             // The pointer is within the image bounds,
             // so set the cursor to the hover cursor if manual translation or scaling is allowed,

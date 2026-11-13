@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>ImageOrganizer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -29,6 +29,21 @@
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
 
+  <!--
+    Models (all Apache-2.0) deployed with the application:
+    - YOLOX-s object detection, used by HumanSubjectDetector, from
+      https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx
+    - RTMPose-s pose estimation, used by HumanPoseEstimator, which is end2end.onnx from
+      https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-s_simcc-body7_pt-body7_420e-256x192-acd4a1ef_20230504.zip
+    - Youtu ReID person re-identification, used by HumanAppearanceEncoder, from
+      https://github.com/opencv/opencv_zoo/raw/main/models/person_reid_youtureid/person_reid_youtu_2021nov_int8bq.onnx
+  -->
+  <ItemGroup>
+    <Content Include="Assets\Models\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
@@ -52,14 +67,14 @@
     <PackageReference Include="CommunityToolkit.WinUI.Converters" Version="8.2.251219" />
     <PackageReference Include="CommunityToolkit.WinUI.Extensions" Version="8.2.251219" />
     <PackageReference Include="CommunityToolkit.WinUI.Helpers" Version="8.2.251219" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
-    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.335">
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.371">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
     <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
   </ItemGroup>
 
@@ -94,7 +109,10 @@
 		<Compile Update="Controls\ImagePresenterControl.layer.xaml.cs">
 			<DependentUpon>ImagePresenterControl.xaml</DependentUpon>
 		</Compile>
-    </ItemGroup>
+		<Compile Update="Controls\ImagePresenterControl.subjects.xaml.cs">
+			<DependentUpon>ImagePresenterControl.xaml</DependentUpon>
+		</Compile>
+	</ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Utility.NET\Utility.WinUI\Utility.WinUI.csproj" />

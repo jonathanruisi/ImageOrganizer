@@ -20,6 +20,7 @@
         <KeyboardAccelerator Key="L" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
         <KeyboardAccelerator Key="G" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
         <KeyboardAccelerator Key="O" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
+        <KeyboardAccelerator Key="P" Invoked="UserControl_KeyboardAcceleratorInvoked"/>
     </UserControl.KeyboardAccelerators>
 
     <Grid>
@@ -66,6 +67,69 @@
                           VerticalAlignment="Center"
                           Glyph="&#xE7A8;"/>
             </ToggleButton>
+
+            <ToggleButton x:Name="ToggleButtonEnableSubjectSelectionMode"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="5,2"
+                          ToolTipService.ToolTip="Detect and select people (P)"
+                          IsChecked="{x:Bind EnableSubjectSelectionMode, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE716;"/>
+            </ToggleButton>
+
+            <ToggleButton x:Name="ToggleButtonKeepSubjectSelection"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="5,2"
+                          ToolTipService.ToolTip="Keep people selected when moving between images"
+                          IsEnabled="{x:Bind EnableSubjectSelectionMode, Mode=OneWay}"
+                          IsChecked="{x:Bind KeepSubjectSelection, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE718;"/>
+            </ToggleButton>
+
+            <ToggleButton x:Name="ToggleButtonFrameSelectedSubjects"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="5,2"
+                          ToolTipService.ToolTip="Zoom in on the selected people and straighten the image so they are upright"
+                          IsEnabled="{x:Bind EnableSubjectSelectionMode, Mode=OneWay}"
+                          IsChecked="{x:Bind FrameSelectedSubjects, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE8A3;"/>
+            </ToggleButton>
+
+            <Button x:Name="ButtonForgetAbsentSubjects"
+                    Width="40"
+                    Height="40"
+                    Padding="3"
+                    Margin="5,2"
+                    IsEnabled="False"
+                    ToolTipService.ToolTip="Forget the selected people who are not in this image"
+                    Click="ButtonForgetAbsentSubjects_Click">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="24"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE8F8;"/>
+            </Button>
 
             <ToggleButton x:Name="ToggleButtonLockTransform"
                           Width="40"
@@ -135,8 +199,67 @@
                        HorizontalContentAlignment="Center"
                        VerticalAlignment="Center"
                        Minimum="25"
-                       Maximum="1000"
+                       Maximum="10000"
                        Value="{x:Bind AutoAdvanceRate, Mode=TwoWay}"/>
+
+            <AppBarSeparator/>
+            <FontIcon FontFamily="Segoe Fluent Icons"
+                      Margin="5,0,0,0"
+                      FontSize="24"
+                      VerticalAlignment="Center"
+                      ToolTipService.ToolTip="Shadows"
+                      Glyph="&#xE708;"/>
+            <Slider x:Name="SliderShadows"
+                    Width="150"
+                    Margin="5,0"
+                    VerticalAlignment="Center"
+                    Minimum="-1"
+                    Maximum="1"
+                    StepFrequency="0.01"
+                    TickFrequency="0.5"
+                    TickPlacement="Outside"
+                    ToolTipService.ToolTip="Shadows"
+                    Value="{x:Bind ImageShadows, Mode=TwoWay}"/>
+
+            <FontIcon FontFamily="Segoe Fluent Icons"
+                      Margin="5,0,0,0"
+                      FontSize="24"
+                      VerticalAlignment="Center"
+                      ToolTipService.ToolTip="Highlights"
+                      Glyph="&#xE706;"/>
+            <Slider x:Name="SliderHighlights"
+                    Width="150"
+                    Margin="5,0"
+                    VerticalAlignment="Center"
+                    Minimum="-1"
+                    Maximum="1"
+                    StepFrequency="0.01"
+                    TickFrequency="0.5"
+                    TickPlacement="Outside"
+                    ToolTipService.ToolTip="Highlights"
+                    Value="{x:Bind ImageHighlights, Mode=TwoWay}"/>
+
+            <Button x:Name="ButtonResetToneAdjustments"
+                    Width="40"
+                    Height="40"
+                    Padding="3"
+                    Margin="5,2"
+                    ToolTipService.ToolTip="Reset shadows and highlights"
+                    Click="ButtonResetToneAdjustments_Click">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="24"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xE777;"/>
+            </Button>
+
+            <TextBlock x:Name="TextBlockSubjectStatus"
+                       Margin="15,0,0,0"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       Text="{x:Bind SubjectStatusText, Mode=OneWay}"/>
         </StackPanel>
 
         <!-- Lower Toolbar -->
