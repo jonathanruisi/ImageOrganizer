@@ -88,7 +88,7 @@
                           Height="40"
                           Padding="3"
                           Margin="5,2"
-                          ToolTipService.ToolTip="Keep people selected when moving between images"
+                          ToolTipService.ToolTip="Keep people selected, and the level line, when moving between images"
                           IsEnabled="{x:Bind EnableSubjectSelectionMode, Mode=OneWay}"
                           IsChecked="{x:Bind KeepSubjectSelection, Mode=TwoWay}">
                 <FontIcon FontFamily="Segoe Fluent Icons"
@@ -129,6 +129,38 @@
                           HorizontalAlignment="Center"
                           VerticalAlignment="Center"
                           Glyph="&#xE8F8;"/>
+            </Button>
+
+            <ToggleButton x:Name="ToggleButtonDrawLevelLine"
+                          Width="40"
+                          Height="40"
+                          Padding="3"
+                          Margin="5,2"
+                          ToolTipService.ToolTip="Draw a line along what should be level, such as the ground under someone's feet"
+                          IsEnabled="{x:Bind EnableSubjectSelectionMode, Mode=OneWay}"
+                          IsChecked="{x:Bind EnableLevelLineDrawing, Mode=TwoWay}">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="30"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xED5E;"/>
+            </ToggleButton>
+
+            <Button x:Name="ButtonClearLevelLine"
+                    Width="40"
+                    Height="40"
+                    Padding="3"
+                    Margin="5,2"
+                    IsEnabled="False"
+                    ToolTipService.ToolTip="Discard the level line"
+                    Click="ButtonClearLevelLine_Click">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Margin="0"
+                          FontSize="24"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Glyph="&#xED60;"/>
             </Button>
 
             <ToggleButton x:Name="ToggleButtonLockTransform"

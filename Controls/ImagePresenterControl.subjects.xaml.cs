@@ -87,12 +87,20 @@ namespace ImageOrganizer.Controls
         private const float SubjectTrackingConfidence = 0.2f;
 
         // The fraction of the render area that framed subjects span, in whichever dimension is the tighter fit
-        private const double SubjectFramingFill = 0.85;
+        private const double SubjectFramingFill = 0.9;
+
+        // The shortest level line, in DIPs as it is drawn, that is taken to be deliberate
+        private const float LevelLineMinimumLength = 20f;
         #endregion
 
         #region Fields
         private readonly List<DetectedSubject> _subjects = [];
         private readonly SubjectSelectionMemory _subjectMemory = new();
+        private readonly LevelLineMemory _levelLineMemory = new();
+        private LevelLine? _levelLine;
+        private Task<SceneFeatures?>? _sceneFeatures;
+        private Vector2 _levelLineDraftStart, _levelLineDraftEnd;
+        private bool _isDrawingLevelLine;
         private HumanSubjectDetector? _subjectDetector;
         private HumanPoseEstimator? _subjectPoseEstimator;
         private HumanAppearanceEncoder? _subjectAppearanceEncoder;
@@ -128,6 +136,12 @@ namespace ImageOrganizer.Controls
         /// While <see cref="KeepSubjectSelection"/> is set, they are selected again in whichever image they reappear in.
         /// </summary>
         public int AbsentSubjectCount => _subjectMemory.AbsentCount;
+
+        /// <summary>
+        /// Gets whether a level line has been drawn, whether or not it is found in the image being displayed.
+        /// See <see cref="EnableLevelLineDrawing"/>.
+        /// </summary>
+        public bool HasLevelLine => _levelLine is not null || _levelLineMemory.HasLine;
         #endregion
 
         #region Public Methods
@@ -138,6 +152,22 @@ namespace ImageOrganizer.Controls
         public void ForgetAbsentSubjects()
         {
             _subjectMemory.ForgetAbsent();
+            UpdateSubjectStatus();
+        }
+
+        /// <summary>
+        /// Discards the level line, so that images are no longer rotated to make it level.
+        /// </summary>
+        public void ClearLevelLine()
+        {
+            var wasLevelled = _levelLine is not null;
+            _levelLine = null;
+            _isDrawingLevelLine = false;
+            _levelLineMemory.Clear();
+
+            if (wasLevelled)
+                UpdateSubjectFraming(restoreView: true);
+
             UpdateSubjectStatus();
         }
         #endregion
@@ -153,12 +183,18 @@ namespace ImageOrganizer.Controls
             var detectionId = ++_subjectDetectionId;
             _subjectFramingId++;
             var hadSelection = _subjects.Any(s => s.IsSelected);
+            var wasLevelled = _levelLine is not null;
 
             _subjects.Clear();
             _hoveredSubject = null;
             _pressedSubject = null;
             _isDetectingSubjects = false;
             _subjectDetectionFailed = false;
+
+            // Where the level line lies is only known for the image it was drawn on or has been found in
+            _levelLine = null;
+            _sceneFeatures = null;
+            _isDrawingLevelLine = false;
 
             if (EnableSubjectSelectionMode && ActiveLayerInstance is { ImageFile: { Bitmap: CanvasBitmap bitmap } imageFile })
             {
@@ -168,8 +204,8 @@ namespace ImageOrganizer.Controls
             }
             else
             {
-                // No subjects are on their way, so a view that was framing some has nothing left to frame
-                UpdateSubjectFraming(restoreView: hadSelection && FrameSelectedSubjects);
+                // Nothing is on its way that the view could be arranged around, so it goes back to being the image's own
+                UpdateSubjectFraming(restoreView: (hadSelection && FrameSelectedSubjects) || wasLevelled);
             }
 
             UpdateSubjectStatus();
@@ -180,6 +216,13 @@ namespace ImageOrganizer.Controls
         private async Task DetectSubjectsAsync(int detectionId, ImageFile imageFile, CanvasBitmap bitmap)
         {
             _isDetectingSubjects = true;
+
+            // The scene is analyzed alongside the detection of people, if there is a level line to be looked for in it
+            if (_levelLineMemory.HasLine)
+                _sceneFeatures = ExtractSceneFeaturesAsync(bitmap);
+
+            var sceneFeatures = _sceneFeatures;
+            LevelLineSearch? levelLineSearch = null;
 
             List<DetectedSubject>? candidates = null;
             SubjectRecognition? recognition = null;
@@ -215,8 +258,19 @@ namespace ImageOrganizer.Controls
             if (candidates is not null && detectionId == _subjectDetectionId && _subjectMemory.HasSelection)
                 recognition = await RecognizeSubjectsAsync(bitmap, candidates);
 
+            // The level line is looked for by how the scene has moved, which the people in it would confuse
+            if (sceneFeatures is not null && detectionId == _subjectDetectionId)
+                levelLineSearch = await _levelLineMemory.LocateAsync(sceneFeatures, candidates?.Select(c => c.LayerBounds).ToList() ?? []);
+
             if (detectionId != _subjectDetectionId)
                 return;
+
+            // The level line may have been cleared or drawn afresh while it was being looked for
+            if (levelLineSearch is not null && _levelLineMemory.HasLine && _levelLine is null)
+            {
+                _levelLineMemory.Accept(levelLineSearch);
+                _levelLine = levelLineSearch.Line;
+            }
 
             _isDetectingSubjects = false;
             if (candidates is null)
@@ -289,10 +343,30 @@ namespace ImageOrganizer.Controls
             }
         }
 
+        /// <summary>
+        /// Finds the distinctive points of an image. The bitmap is only accessed before this method first yields.
+        /// </summary>
+        /// <returns>
+        /// The distinctive points, or null if they could not be worked out
+        /// </returns>
+        private static async Task<SceneFeatures?> ExtractSceneFeaturesAsync(CanvasBitmap bitmap)
+        {
+            try
+            {
+                return await SceneFeatures.ExtractAsync(bitmap);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Scene analysis failed: {ex}");
+                return null;
+            }
+        }
+
         private void UpdateSubjectStatus()
         {
             var absentCount = _subjectMemory.AbsentCount;
             ButtonForgetAbsentSubjects.IsEnabled = absentCount > 0;
+            ButtonClearLevelLine.IsEnabled = HasLevelLine;
 
             if (!EnableSubjectSelectionMode || ActiveLayerInstance?.ImageFile?.Bitmap is null)
                 SubjectStatusText = string.Empty;
@@ -307,6 +381,9 @@ namespace ImageOrganizer.Controls
 
             if (absentCount > 0 && !_isDetectingSubjects && SubjectStatusText.Length > 0)
                 SubjectStatusText += $" ({absentCount} selected {(absentCount == 1 ? "person" : "people")} not in this image)";
+
+            if (_levelLine is null && _levelLineMemory.HasLine && !_isDetectingSubjects && SubjectStatusText.Length > 0)
+                SubjectStatusText += " · Level line not found in this image";
         }
         #endregion
 
@@ -377,9 +454,30 @@ namespace ImageOrganizer.Controls
 
         #region Private Methods (Subject Tracking and Framing)
         /// <summary>
-        /// Gets whether the view is framing subjects that will be looked for in the next image displayed.
+        /// Gets whether the view is arranged around something that will be looked for in the next image displayed:
+        /// the selected subjects that are being framed, or the level line.
         /// </summary>
-        private bool IsFramingTrackedSubjects => EnableSubjectSelectionMode && FrameSelectedSubjects && _subjectMemory.IsSelectionPresent;
+        private bool IsViewTracked => EnableSubjectSelectionMode &&
+                                      ((FrameSelectedSubjects && _subjectMemory.IsSelectionPresent) || _levelLineMemory.HasLine);
+
+        /// <summary>
+        /// Notes the level line and the scene it lies in, so that it can be found in the images displayed after this one.
+        /// </summary>
+        private void UpdateTrackedLevelLine()
+        {
+            if (!EnableSubjectSelectionMode || !KeepSubjectSelection)
+            {
+                _levelLineMemory.Clear();
+                return;
+            }
+
+            // The scene has to be captured here, while its image is still the one displayed
+            if (_levelLine is { } line && ActiveLayerInstance?.ImageFile?.Bitmap is CanvasBitmap bitmap)
+            {
+                _sceneFeatures ??= ExtractSceneFeaturesAsync(bitmap);
+                _levelLineMemory.Set(_sceneFeatures, _subjects.Select(s => s.LayerBounds).ToList(), line);
+            }
+        }
 
         /// <summary>
         /// Notes who is in the image being displayed and what they look like,
@@ -424,10 +522,11 @@ namespace ImageOrganizer.Controls
         }
 
         /// <summary>
-        /// Brings the view into line with the selection. If framing is enabled and subjects are selected,
-        /// they are framed. Otherwise, if the view had been given over to framing, the image's own view is restored.
+        /// Brings the view into line with the selection and the level line. If framing is enabled and subjects are
+        /// selected, they are framed. Otherwise, if the view had been arranged around them, the image's own view is
+        /// restored. Either way, if the level line is known in the image, the image is rotated to make it level.
         /// </summary>
-        /// <param name="restoreView">Whether the view is known to have been framing subjects</param>
+        /// <param name="restoreView">Whether the view is known to have been arranged around the subjects or the level line</param>
         private void UpdateSubjectFraming(bool restoreView)
         {
             restoreView |= _isSubjectViewDeferred;
@@ -437,16 +536,28 @@ namespace ImageOrganizer.Controls
             {
                 // Fire-and-forget by design: the method handles its own errors and gives way to later requests
                 _ = FrameSelectedSubjectsAsync();
+                return;
             }
-            else if (restoreView)
+
+            if (restoreView)
             {
                 _subjectFramingId++;
                 ApplyTransformPropertiesFromLayer(ActiveLayer);
             }
+
+            if (EnableSubjectSelectionMode && _levelLine is { } line)
+            {
+                var view = SubjectFraming.Rotate(new SubjectFrame(ImageRotation, ImageScale, ImageTranslationX, ImageTranslationY),
+                                                 SubjectFraming.GetLevelRotation(line));
+                ImageRotation = view.Rotation;
+                ImageTranslationX = view.TranslationX;
+                ImageTranslationY = view.TranslationY;
+            }
         }
 
         /// <summary>
-        /// Zooms in on the selected subjects, and rotates the image so that they are upright.
+        /// Zooms in on the selected subjects, and rotates the image so that the level line is level
+        /// or, if there is no level line in the image, so that the subjects are upright.
         /// </summary>
         private async Task FrameSelectedSubjectsAsync()
         {
@@ -455,32 +566,48 @@ namespace ImageOrganizer.Controls
                 return;
 
             var selectedSubjects = _subjects.Where(s => s.IsSelected).ToList();
-            foreach (var subject in selectedSubjects.Where(s => !s.IsTiltEstimated))
+            var imageSize = new Size(imageFile.BoundingRect.Width, imageFile.BoundingRect.Height);
+            var viewportSize = new Size(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight);
+
+            SubjectFrame? frame;
+            if (_levelLine is { } line)
             {
-                double? tilt = null;
-                try
+                frame = SubjectFraming.GetFrame(selectedSubjects.Select(s => s.LayerBounds),
+                                                SubjectFraming.GetLevelRotation(line),
+                                                imageSize,
+                                                viewportSize,
+                                                SubjectFramingFill);
+            }
+            else
+            {
+                foreach (var subject in selectedSubjects.Where(s => !s.IsTiltEstimated))
                 {
-                    var poseEstimator = _subjectPoseEstimator ??= new HumanPoseEstimator();
-                    tilt = await poseEstimator.EstimateTiltAsync(bitmap, subject.LayerBounds);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Subject pose estimation failed: {ex}");
+                    double? tilt = null;
+                    try
+                    {
+                        var poseEstimator = _subjectPoseEstimator ??= new HumanPoseEstimator();
+                        tilt = await poseEstimator.EstimateTiltAsync(bitmap, subject.LayerBounds);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Subject pose estimation failed: {ex}");
+                    }
+
+                    if (framingId != _subjectFramingId)
+                        return;
+
+                    subject.Tilt = tilt;
+                    subject.IsTiltEstimated = true;
                 }
 
-                if (framingId != _subjectFramingId)
-                    return;
-
-                subject.Tilt = tilt;
-                subject.IsTiltEstimated = true;
+                // A subject whose tilt could not be told has no say in the rotation, but is still kept in view
+                frame = SubjectFraming.GetFrame(selectedSubjects.Select(s => s.LayerBounds),
+                                                selectedSubjects.Where(s => s.Tilt.HasValue).Select(s => s.Tilt.GetValueOrDefault()),
+                                                imageSize,
+                                                viewportSize,
+                                                SubjectFramingFill);
             }
 
-            // A subject whose tilt could not be told has no say in the rotation, but is still kept in view
-            var frame = SubjectFraming.GetFrame(selectedSubjects.Select(s => s.LayerBounds),
-                                                selectedSubjects.Where(s => s.Tilt.HasValue).Select(s => s.Tilt.GetValueOrDefault()),
-                                                new Size(imageFile.BoundingRect.Width, imageFile.BoundingRect.Height),
-                                                new Size(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight),
-                                                SubjectFramingFill);
             if (frame is not { } view)
                 return;
 
@@ -488,6 +615,59 @@ namespace ImageOrganizer.Controls
             ImageScale = view.Scale;
             ImageTranslationX = view.TranslationX;
             ImageTranslationY = view.TranslationY;
+        }
+        #endregion
+
+        #region Private Methods (Level Line Drawing)
+        /// <summary>
+        /// Starts a level line at a position within the control, if the tool for drawing one is active.
+        /// </summary>
+        private bool BeginLevelLine(ImagePresenterLayer layer, Point position)
+        {
+            if (!EnableLevelLineDrawing ||
+                !EnableSubjectSelectionMode ||
+                layer.ImageFile?.Bitmap is null ||
+                !Matrix3x2.Invert(layer.Transform, out var inverseTransform))
+                return false;
+
+            // The line is kept in the image's coordinate space, so that it stays put on the image while being drawn
+            _levelLineDraftStart = _levelLineDraftEnd = Vector2.Transform(position.ToVector2(), inverseTransform);
+            _isDrawingLevelLine = true;
+            return true;
+        }
+
+        private void ContinueLevelLine(ImagePresenterLayer layer, Point position)
+        {
+            if (_isDrawingLevelLine && Matrix3x2.Invert(layer.Transform, out var inverseTransform))
+                _levelLineDraftEnd = Vector2.Transform(position.ToVector2(), inverseTransform);
+        }
+
+        /// <summary>
+        /// Finishes the level line being drawn, and rotates the image to make it level.
+        /// </summary>
+        private void CompleteLevelLine(ImagePresenterLayer layer, Point position)
+        {
+            if (!_isDrawingLevelLine)
+                return;
+
+            ContinueLevelLine(layer, position);
+            _isDrawingLevelLine = false;
+
+            // A line too short to have been meant leaves the tool active for another attempt
+            var start = Vector2.Transform(_levelLineDraftStart, layer.Transform);
+            var end = Vector2.Transform(_levelLineDraftEnd, layer.Transform);
+            if (!(Vector2.Distance(start, end) >= LevelLineMinimumLength))
+                return;
+
+            // Whichever end is on the left as the line is drawn stays on the left, so the image is turned the shorter way
+            _levelLine = start.X <= end.X
+                ? new LevelLine(_levelLineDraftStart, _levelLineDraftEnd)
+                : new LevelLine(_levelLineDraftEnd, _levelLineDraftStart);
+
+            EnableLevelLineDrawing = false;
+            UpdateTrackedLevelLine();
+            UpdateSubjectFraming(restoreView: false);
+            UpdateSubjectStatus();
         }
         #endregion
 
@@ -536,8 +716,8 @@ namespace ImageOrganizer.Controls
                 if (subject.IsSelected || isHovered)
                 {
                     brush.Opacity = subject.IsSelected && isHovered ? 0.4f
-                                  : subject.IsSelected ? 0.3f
-                                  : 0.15f;
+                                  //: subject.IsSelected ? 0.3f
+                                  : 0.1f;
                     ds.FillRectangle(subject.LayerBounds, brush);
                     brush.Opacity = 1f;
                 }
@@ -545,6 +725,35 @@ namespace ImageOrganizer.Controls
                 // A dark edge keeps the outline visible against areas of the image that match the brush
                 ds.DrawRectangle(subject.LayerBounds, contrastColor, contrastThickness);
                 ds.DrawRectangle(subject.LayerBounds, brush, thickness);
+            }
+            ds.Transform = Matrix3x2.Identity;
+        }
+
+        private void DrawLevelLine(CanvasDrawingSession ds, ImagePresenterLayer layer)
+        {
+            if (!EnableSubjectSelectionMode || ImageScale <= 0 || (_levelLine is null && !_isDrawingLevelLine))
+                return;
+
+            EnsureSubjectBrushes();
+            if (_subjectBrush is null || _selectedSubjectBrush is null)
+                return;
+
+            var thickness = (float)(SubjectOutlineThickness / ImageScale);
+            var contrastThickness = thickness + (float)(2 / ImageScale);
+            var contrastColor = Color.FromArgb(128, 0, 0, 0);
+
+            // The line in effect stays in view while its replacement is being drawn
+            ds.Transform = layer.Transform;
+            if (_levelLine is { } line)
+            {
+                ds.DrawLine(line.Start, line.End, contrastColor, contrastThickness);
+                ds.DrawLine(line.Start, line.End, _selectedSubjectBrush, thickness);
+            }
+
+            if (_isDrawingLevelLine)
+            {
+                ds.DrawLine(_levelLineDraftStart, _levelLineDraftEnd, contrastColor, contrastThickness);
+                ds.DrawLine(_levelLineDraftStart, _levelLineDraftEnd, _subjectBrush, thickness);
             }
             ds.Transform = Matrix3x2.Identity;
         }

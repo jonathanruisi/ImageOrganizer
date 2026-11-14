@@ -40,9 +40,30 @@ namespace ImageOrganizer
                                              Size viewportSize,
                                              double fill)
         {
+            return GetFrame(subjectBounds, -GetAverageAngle(subjectTilts), imageSize, viewportSize, fill);
+        }
+
+        /// <summary>
+        /// Works out the view of an image, rotated by a given amount, in which a group of subjects is centered and as large as will fit.
+        /// </summary>
+        /// <param name="subjectBounds">Bounding boxes of the subjects, relative to the image</param>
+        /// <param name="rotation">The clockwise rotation of the image, in degrees</param>
+        /// <param name="imageSize">The size of the image</param>
+        /// <param name="viewportSize">The size of the area the image is displayed in</param>
+        /// <param name="fill">
+        /// The fraction of the viewport that the subjects should span, in whichever dimension is the tighter fit
+        /// </param>
+        /// <returns>
+        /// The view, or null if there is nothing to frame or nowhere to display it
+        /// </returns>
+        public static SubjectFrame? GetFrame(IEnumerable<Rect> subjectBounds,
+                                             double rotation,
+                                             Size imageSize,
+                                             Size viewportSize,
+                                             double fill)
+        {
             // Rotating the image about its center, as the control does, leaves the subjects somewhere
             // new. The extents they then cover determine the scale and what is brought to the center.
-            var rotation = -GetAverageAngle(subjectTilts);
             var imageCenter = new Vector2((float)(imageSize.Width / 2), (float)(imageSize.Height / 2));
             var rotationMatrix = Matrix3x2.CreateRotation((float)(rotation * Math.PI / 180.0), imageCenter);
 
@@ -73,10 +94,45 @@ namespace ImageOrganizer
             var scale = fill * Math.Min(viewportSize.Width / extent.X, viewportSize.Height / extent.Y);
             var subjectCenter = (minimum + maximum) / 2;
 
-            return new SubjectFrame(((rotation % 360.0) + 360.0) % 360.0,
+            return new SubjectFrame(NormalizeAngle(rotation),
                                     scale,
                                     scale * (imageCenter.X - subjectCenter.X),
                                     scale * (imageCenter.Y - subjectCenter.Y));
+        }
+
+        /// <summary>
+        /// Works out the rotation of an image that makes a level line level, with its start on the left.
+        /// </summary>
+        /// <returns>
+        /// The clockwise rotation of the image, in degrees within [0, 360)
+        /// </returns>
+        public static double GetLevelRotation(LevelLine line)
+        {
+            return NormalizeAngle(-Math.Atan2(line.End.Y - line.Start.Y, line.End.X - line.Start.X) * 180.0 / Math.PI);
+        }
+
+        /// <summary>
+        /// Changes the rotation of a view, while keeping whatever part of the image is at the center of the viewport there.
+        /// </summary>
+        /// <param name="view">The view to change</param>
+        /// <param name="rotation">The new clockwise rotation of the image, in degrees</param>
+        public static SubjectFrame Rotate(SubjectFrame view, double rotation)
+        {
+            // The translation is the offset of the image's center from the viewport's, so turning the image
+            // about the center of the viewport turns that offset by however much the rotation changes
+            var change = (rotation - view.Rotation) * Math.PI / 180.0;
+            var cos = Math.Cos(change);
+            var sin = Math.Sin(change);
+
+            return new SubjectFrame(NormalizeAngle(rotation),
+                                    view.Scale,
+                                    (cos * view.TranslationX) - (sin * view.TranslationY),
+                                    (sin * view.TranslationX) + (cos * view.TranslationY));
+        }
+
+        private static double NormalizeAngle(double angle)
+        {
+            return ((angle % 360.0) + 360.0) % 360.0;
         }
 
         /// <summary>

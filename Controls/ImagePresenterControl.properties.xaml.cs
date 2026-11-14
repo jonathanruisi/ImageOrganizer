@@ -295,6 +295,28 @@ namespace ImageOrganizer.Controls
                                         new PropertyMetadata(false, OnFrameSelectedSubjectsChanged));
 
         /// <summary>
+        /// Gets or sets whether dragging across the image draws a level line: a line marking what ought
+        /// to be level, such as the ground under a subject's feet. The image is then rotated to make it so.
+        /// </summary>
+        /// <remarks>
+        /// This is cleared once a line has been drawn. Setting it also sets <see cref="EnableSubjectSelectionMode"/>.
+        /// A level line takes the place of the subjects' pose in deciding the rotation when subjects are framed.
+        /// While <see cref="KeepSubjectSelection"/> is set, the line is looked for in each image displayed afterwards,
+        /// by how the scene has moved, until it is discarded with <see cref="ClearLevelLine"/>.
+        /// </remarks>
+        public bool EnableLevelLineDrawing
+        {
+            get => (bool)GetValue(EnableLevelLineDrawingProperty);
+            set => SetValue(EnableLevelLineDrawingProperty, value);
+        }
+
+        public static readonly DependencyProperty EnableLevelLineDrawingProperty =
+            DependencyProperty.Register(nameof(EnableLevelLineDrawing),
+                                        typeof(bool),
+                                        typeof(ImagePresenterControl),
+                                        new PropertyMetadata(false, OnEnableLevelLineDrawingChanged));
+
+        /// <summary>
         /// Gets a description of the current state of subject detection and selection.
         /// </summary>
         public string SubjectStatusText

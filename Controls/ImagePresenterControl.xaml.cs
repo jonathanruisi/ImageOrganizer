@@ -115,9 +115,9 @@ namespace ImageOrganizer.Controls
             if (makeActive)
                 ActiveLayer = layerIndex;
 
-            // While the view is framing subjects that may also be in the new image, it is left as
-            // it is until they have been looked for, rather than showing each image's own view in between
-            _isSubjectViewDeferred = isActiveLayer && IsFramingTrackedSubjects;
+            // While the view is arranged around subjects or a level line that may also be in the new image, it is
+            // left as it is until they have been looked for, rather than showing each image's own view in between
+            _isSubjectViewDeferred = isActiveLayer && IsViewTracked;
             if (!_isSubjectViewDeferred)
                 ApplyTransformPropertiesFromLayer(layerIndex);
 
@@ -351,8 +351,11 @@ namespace ImageOrganizer.Controls
 
             if (ip.EnableSubjectSelectionMode)
                 ip.EnableCropMode = false;
+            else
+                ip.EnableLevelLineDrawing = false;
 
             ip.UpdateTrackedSubjects();
+            ip.UpdateTrackedLevelLine();
             ip.RefreshSubjects();
         }
 
@@ -362,7 +365,20 @@ namespace ImageOrganizer.Controls
                 return;
 
             ip.UpdateTrackedSubjects();
+            ip.UpdateTrackedLevelLine();
             ip.UpdateSubjectStatus();
+        }
+
+        private static void OnEnableLevelLineDrawingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ImagePresenterControl ip)
+                return;
+
+            // The level line belongs to subject selection mode, where it is drawn, shown and kept
+            if (ip.EnableLevelLineDrawing)
+                ip.EnableSubjectSelectionMode = true;
+            else
+                ip._isDrawingLevelLine = false;
         }
 
         private static void OnFrameSelectedSubjectsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -444,6 +460,11 @@ namespace ImageOrganizer.Controls
                     EnableCropMode = false;
                     e.Handled = true;
                 }
+                else if (EnableLevelLineDrawing)
+                {
+                    EnableLevelLineDrawing = false;
+                    e.Handled = true;
+                }
                 else if (EnableSubjectSelectionMode)
                 {
                     EnableSubjectSelectionMode = false;
@@ -520,6 +541,11 @@ namespace ImageOrganizer.Controls
         {
             ForgetAbsentSubjects();
         }
+
+        private void ButtonClearLevelLine_Click(object sender, RoutedEventArgs e)
+        {
+            ClearLevelLine();
+        }
         #endregion
 
         #region Event Handlers (Timers)
@@ -556,6 +582,7 @@ namespace ImageOrganizer.Controls
             ds.Transform = Matrix3x2.Identity;
 
             DrawSubjects(ds, layer);
+            DrawLevelLine(ds, layer);
 
             // Determine the number of different flag adornments needed
             const float adornDistFromEdge = 25f;
@@ -690,6 +717,14 @@ namespace ImageOrganizer.Controls
 
             if (point.Properties.IsLeftButtonPressed)
             {
+                // Left-click occured within the image bounds while the level line tool is active,
+                // so capture the pointer for drawing the line
+                if (isWithinImage && BeginLevelLine(layer, point.Position))
+                {
+                    _isDrawingLevelLine = PresentationBorder.CapturePointer(e.Pointer);
+                    return;
+                }
+
                 BeginSubjectClick(layer, point.Position, e.KeyModifiers);
 
                 // Left-click occured on or within the crop rectangle,
@@ -737,6 +772,7 @@ namespace ImageOrganizer.Controls
             var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
             var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
+            CompleteLevelLine(layer, point.Position);
             CompleteSubjectClick(layer, point.Position);
             UpdateHoveredSubject(layer, point.Position);
             SetCursor(isWithinImage, cropRectProximity);
@@ -753,6 +789,7 @@ namespace ImageOrganizer.Controls
             var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
             var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
+            _isDrawingLevelLine = false;
             _pressedSubject = null;
             UpdateHoveredSubject(layer, point.Position);
             SetCursor(isWithinImage, cropRectProximity);
@@ -769,6 +806,7 @@ namespace ImageOrganizer.Controls
             var isWithinImage = layer.TransformedImageQuadrilateral.Contains(point.Position);
             var cropRectProximity = layer.CropRectangle.IsPointOnOrNear(point.Position, SnapDistance);
 
+            _isDrawingLevelLine = false;
             _pressedSubject = null;
             UpdateHoveredSubject(layer, point.Position);
             SetCursor(isWithinImage, cropRectProximity);
@@ -787,9 +825,14 @@ namespace ImageOrganizer.Controls
             var deltaX = point.Position.X - _previousPointerPosition.X;
             var deltaY = point.Position.Y - _previousPointerPosition.Y;
 
+            // Extend the level line being drawn to the pointer position
+            if (_isDrawingLevelLine && point.Properties.IsLeftButtonPressed)
+            {
+                ContinueLevelLine(layer, point.Position);
+            }
             // Resize the crop rectangle if the pointer is on or near one of its edges or corners,
             // or move the crop rectangle if the pointer is inside it.
-            if (layer.IsCropping && point.Properties.IsLeftButtonPressed)
+            else if (layer.IsCropping && point.Properties.IsLeftButtonPressed)
             {
                 var cropRect = layer.CropRectangle;
                 var imageBounds = layer.TransformedImageQuadrilateral.BoundingBox;
@@ -985,9 +1028,16 @@ namespace ImageOrganizer.Controls
 
         private void SetCursor(bool isWithinImage, RectLocations cropRectProximity)
         {
+            // The level line tool is active and the pointer is within the image bounds,
+            // so set the cursor to the hover (cross) cursor that the line is drawn with
+            if (EnableLevelLineDrawing && isWithinImage)
+            {
+                if (ProtectedCursor != _hoverCursor)
+                    ProtectedCursor = _hoverCursor;
+            }
             // Crop mode is enabled and the pointer is inside the crop rectangle,
             // so set the cursor to the drag cursor
-            if (EnableCropMode && cropRectProximity == RectLocations.Inside)
+            else if (EnableCropMode && cropRectProximity == RectLocations.Inside)
             {
                 if (ProtectedCursor != _dragCursor)
                     ProtectedCursor = _dragCursor;
