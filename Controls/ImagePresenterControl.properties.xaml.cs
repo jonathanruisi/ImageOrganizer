@@ -96,53 +96,41 @@ namespace ImageOrganizer.Controls
         #endregion
 
         #region Pointer Manipulation Properties
-        public bool AllowManualTranslation
+        public bool LockTranslation
         {
-            get => (bool)GetValue(AllowManualTranslationProperty);
-            set => SetValue(AllowManualTranslationProperty, value);
+            get => (bool)GetValue(LockTranslationProperty);
+            set => SetValue(LockTranslationProperty, value);
         }
 
-        public static readonly DependencyProperty AllowManualTranslationProperty =
-            DependencyProperty.Register(nameof(AllowManualTranslation),
+        public static readonly DependencyProperty LockTranslationProperty =
+            DependencyProperty.Register(nameof(LockTranslation),
                                         typeof(bool),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(false));
+                                        new PropertyMetadata(true));
 
-        public bool AllowManualScaling
+        public bool LockScaling
         {
-            get => (bool)GetValue(AllowManualScalingProperty);
-            set => SetValue(AllowManualScalingProperty, value);
+            get => (bool)GetValue(LockScalingProperty);
+            set => SetValue(LockScalingProperty, value);
         }
 
-        public static readonly DependencyProperty AllowManualScalingProperty =
-            DependencyProperty.Register(nameof(AllowManualScaling),
+        public static readonly DependencyProperty LockScalingProperty =
+            DependencyProperty.Register(nameof(LockScaling),
                                         typeof(bool),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(false));
+                                        new PropertyMetadata(true));
 
-        public bool AllowManualRotation
+        public bool LockRotation
         {
-            get => (bool)GetValue(AllowManualRotationProperty);
-            set => SetValue(AllowManualRotationProperty, value);
+            get => (bool)GetValue(LockRotationProperty);
+            set => SetValue(LockRotationProperty, value);
         }
 
-        public static readonly DependencyProperty AllowManualRotationProperty =
-            DependencyProperty.Register(nameof(AllowManualRotation),
+        public static readonly DependencyProperty LockRotationProperty =
+            DependencyProperty.Register(nameof(LockRotation),
                                         typeof(bool),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(false));
-
-        public bool LockTransform
-        {
-            get => (bool)GetValue(LockTransformProperty);
-            set => SetValue(LockTransformProperty, value);
-        }
-
-        public static readonly DependencyProperty LockTransformProperty =
-            DependencyProperty.Register(nameof(LockTransform),
-                                        typeof(bool),
-                                        typeof(ImagePresenterControl),
-                                        new PropertyMetadata(false));
+                                        new PropertyMetadata(true));
 
         public bool IsAutoAdvanceActive
         {

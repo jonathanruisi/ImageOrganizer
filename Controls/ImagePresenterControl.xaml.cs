@@ -126,9 +126,9 @@ namespace ImageOrganizer.Controls
             // values, OnImageTransformChanged never fires, so update the transform explicitly.
             _layers[layerIndex].UpdateTransform();
 
-            AllowManualTranslation = true;
-            AllowManualScaling = true;
-            AllowManualRotation = true;
+            LockTranslation = false;
+            LockScaling = false;
+            LockRotation = false;
             EnableCropMode = false;
 
             // The subjects belong to the image of the active layer.
@@ -147,9 +147,9 @@ namespace ImageOrganizer.Controls
 
             _layers.Clear();
 
-            AllowManualTranslation = false;
-            AllowManualScaling = false;
-            AllowManualRotation = false;
+            LockTranslation = true;
+            LockScaling = true;
+            LockRotation = true;
             EnableCropMode = false;
 
             // Add the background layer back to the list
@@ -331,14 +331,14 @@ namespace ImageOrganizer.Controls
 
             if (ip.EnableCropMode && layer.ImageFile is not null)
             {
-                ip.AllowManualRotation = false;
+                ip.LockRotation = true;
                 ip.ToggleButtonAllowRotation.IsEnabled = false;
                 ip.ImageRotation = 0;
                 layer.CropRectangle = layer.TransformedImageQuadrilateral.BoundingBox;
             }
             else
             {
-                ip.AllowManualRotation = true;
+                ip.LockRotation = false;
                 ip.ToggleButtonAllowRotation.IsEnabled = true;
                 layer.CropRectangle = Rect.Empty;
             }
@@ -493,15 +493,6 @@ namespace ImageOrganizer.Controls
                         ImageScale = 1;
                     else
                         ScaleLayerToFit(ActiveLayer);
-
-                    e.Handled = true;
-                }
-            }
-            else if (sender.Key == VirtualKey.L)
-            {
-                if (ActiveLayerInstance?.ImageFile is not null)
-                {
-                    LockTransform = !LockTransform;
 
                     e.Handled = true;
                 }
@@ -735,7 +726,7 @@ namespace ImageOrganizer.Controls
                     layer.CropRectAdjustmentLocation = cropRectProximity;
                 }
                 // Left-click occured within the image bounds
-                else if (isWithinImage && AllowManualTranslation)
+                else if (isWithinImage && !LockTranslation)
                 {
                     // If the Control key is held down, center the image on the pointer position
                     if (e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control))
@@ -973,13 +964,13 @@ namespace ImageOrganizer.Controls
             var prevScaledImageSourceRect = layer.TransformedImageQuadrilateral.BoundingBox;
 
             // Adjust the image rotation based on the mouse wheel delta
-            if (AllowManualRotation && e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift))
+            if (!LockRotation && e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift))
             {
                 var magnitude = e.KeyModifiers.HasFlag(VirtualKeyModifiers.Control) ? 1 : RotationRate;
                 ImageRotation -= delta * magnitude;
             }
             // Adjust the image scale based on the mouse wheel delta
-            else if (AllowManualScaling && prevScaledImageSourceRect.Contains(point.Position))
+            else if (!LockScaling && prevScaledImageSourceRect.Contains(point.Position))
             {
                 LinearImageScale += delta;
                 var boundingBox = layer.TransformedImageQuadrilateral.BoundingBox;
@@ -1006,8 +997,7 @@ namespace ImageOrganizer.Controls
         #region Private Methods
         private void ApplyTransformPropertiesFromLayer(int layerIndex = 0)
         {
-            if (LockTransform ||
-                layerIndex < 0 ||
+            if (layerIndex < 0 ||
                 layerIndex >= _layers.Count ||
                 _layers[layerIndex].ImageFile is not ImageFile imageFile)
                 return;
@@ -1082,7 +1072,7 @@ namespace ImageOrganizer.Controls
             // otherwise set it to the primary cursor
             else if (isWithinImage)
             {
-                if (AllowManualTranslation || AllowManualScaling)
+                if (!LockTranslation || !LockScaling)
                 {
                     if (ProtectedCursor != _hoverCursor)
                         ProtectedCursor = _hoverCursor;
