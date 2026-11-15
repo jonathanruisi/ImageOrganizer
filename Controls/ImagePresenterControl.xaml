@@ -286,7 +286,7 @@
                     Orientation="Horizontal"
                     Padding="3"
                     Visibility="{x:Bind LowerToolbarVisibility, Mode=TwoWay}">
-            <ToggleButton x:Name="ToggleButtonAllowTranslation"
+            <ToggleButton x:Name="ToggleButtonLockTranslation"
                           Width="40"
                           Height="40"
                           Padding="3"
@@ -297,8 +297,15 @@
                           FontSize="30"
                           HorizontalAlignment="Center"
                           VerticalAlignment="Center"
-                          Glyph="&#xE7C2;"/>
+                          Glyph="&#xE72E;"/>
             </ToggleButton>
+
+            <FontIcon FontFamily="Segoe Fluent Icons"
+                      Margin="0"
+                      FontSize="30"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Glyph="&#xE7C2;"/>
 
             <TextBlock FontFamily="Arial"
                        FontWeight="Bold"
@@ -345,7 +352,7 @@
                                    Mode=OneWay}"/>
 
             <AppBarSeparator Margin="10,0,0,0"/>
-            <ToggleButton x:Name="ToggleButtonAllowScaling"
+            <ToggleButton x:Name="ToggleButtonLockScaling"
                           Width="40"
                           Height="40"
                           Padding="3"
@@ -356,8 +363,15 @@
                           FontSize="30"
                           HorizontalAlignment="Center"
                           VerticalAlignment="Center"
-                          Glyph="&#xECE8;"/>
+                          Glyph="&#xE72E;"/>
             </ToggleButton>
+
+            <FontIcon FontFamily="Segoe Fluent Icons"
+                      Margin="0"
+                      FontSize="30"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Glyph="&#xECE8;"/>
 
             <TextBox x:Name="TextBoxScale"
                      FontFamily="Consolas"
@@ -376,7 +390,7 @@
                                    Mode=OneWay}"/>
 
             <AppBarSeparator Margin="10,0,0,0"/>
-            <ToggleButton x:Name="ToggleButtonAllowRotation"
+            <ToggleButton x:Name="ToggleButtonLockRotation"
                           Width="40"
                           Height="40"
                           Padding="3"
@@ -387,8 +401,15 @@
                           FontSize="30"
                           HorizontalAlignment="Center"
                           VerticalAlignment="Center"
-                          Glyph="&#xE7AD;"/>
+                          Glyph="&#xE72E;"/>
             </ToggleButton>
+
+            <FontIcon FontFamily="Segoe Fluent Icons"
+                      Margin="0"
+                      FontSize="30"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Glyph="&#xE7AD;"/>
 
             <TextBox x:Name="TextBoxRotation"
                      FontFamily="Consolas"

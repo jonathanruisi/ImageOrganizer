@@ -545,19 +545,25 @@ namespace ImageOrganizer.Controls
                 ApplyTransformPropertiesFromLayer(ActiveLayer);
             }
 
-            if (EnableSubjectSelectionMode && _levelLine is { } line)
+            if (EnableSubjectSelectionMode && !LockRotation && _levelLine is { } line)
             {
                 var view = SubjectFraming.Rotate(new SubjectFrame(ImageRotation, ImageScale, ImageTranslationX, ImageTranslationY),
                                                  SubjectFraming.GetLevelRotation(line));
                 ImageRotation = view.Rotation;
-                ImageTranslationX = view.TranslationX;
-                ImageTranslationY = view.TranslationY;
+
+                // The translation only changes to turn the image about the center of the view rather than its own
+                if (!LockTranslation)
+                {
+                    ImageTranslationX = view.TranslationX;
+                    ImageTranslationY = view.TranslationY;
+                }
             }
         }
 
         /// <summary>
-        /// Zooms in on the selected subjects, and rotates the image so that the level line is level
-        /// or, if there is no level line in the image, so that the subjects are upright.
+        /// Centers the view on the selected subjects. Unless they are locked, the scale is set to make the subjects
+        /// as large as will fit, and the image is rotated so that the level line is level or, if there is no
+        /// level line in the image, so that the subjects are upright.
         /// </summary>
         private async Task FrameSelectedSubjectsAsync()
         {
@@ -566,19 +572,7 @@ namespace ImageOrganizer.Controls
                 return;
 
             var selectedSubjects = _subjects.Where(s => s.IsSelected).ToList();
-            var imageSize = new Size(imageFile.BoundingRect.Width, imageFile.BoundingRect.Height);
-            var viewportSize = new Size(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight);
-
-            SubjectFrame? frame;
-            if (_levelLine is { } line)
-            {
-                frame = SubjectFraming.GetFrame(selectedSubjects.Select(s => s.LayerBounds),
-                                                SubjectFraming.GetLevelRotation(line),
-                                                imageSize,
-                                                viewportSize,
-                                                SubjectFramingFill);
-            }
-            else
+            if (!LockRotation && _levelLine is null)
             {
                 foreach (var subject in selectedSubjects.Where(s => !s.IsTiltEstimated))
                 {
@@ -599,22 +593,33 @@ namespace ImageOrganizer.Controls
                     subject.Tilt = tilt;
                     subject.IsTiltEstimated = true;
                 }
-
-                // A subject whose tilt could not be told has no say in the rotation, but is still kept in view
-                frame = SubjectFraming.GetFrame(selectedSubjects.Select(s => s.LayerBounds),
-                                                selectedSubjects.Where(s => s.Tilt.HasValue).Select(s => s.Tilt.GetValueOrDefault()),
-                                                imageSize,
-                                                viewportSize,
-                                                SubjectFramingFill);
             }
 
+            // Where the subjects end up depends on the rotation and the scale, so the view is worked out for the
+            // ones that will be in effect. A locked rotation or scale is taken as it is, not left out afterwards.
+            // A subject whose tilt could not be told has no say in the rotation, but is still kept in view.
+            var rotation = LockRotation ? ImageRotation
+                         : _levelLine is { } line ? SubjectFraming.GetLevelRotation(line)
+                         : SubjectFraming.GetUprightRotation(selectedSubjects.Where(s => s.Tilt.HasValue).Select(s => s.Tilt.GetValueOrDefault()));
+
+            var frame = SubjectFraming.GetFrame(selectedSubjects.Select(s => s.LayerBounds),
+                                                rotation,
+                                                new Size(imageFile.BoundingRect.Width, imageFile.BoundingRect.Height),
+                                                new Size(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight),
+                                                SubjectFramingFill,
+                                                LockScaling ? ImageScale : null);
             if (frame is not { } view)
                 return;
 
-            ImageRotation = view.Rotation;
-            ImageScale = view.Scale;
-            ImageTranslationX = view.TranslationX;
-            ImageTranslationY = view.TranslationY;
+            if (!LockRotation)
+                ImageRotation = view.Rotation;
+            if (!LockScaling)
+                ImageScale = view.Scale;
+            if (!LockTranslation)
+            {
+                ImageTranslationX = view.TranslationX;
+                ImageTranslationY = view.TranslationY;
+            }
         }
         #endregion
 

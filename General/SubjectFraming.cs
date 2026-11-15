@@ -19,39 +19,36 @@ namespace ImageOrganizer
     public static class SubjectFraming
     {
         /// <summary>
-        /// Works out the view of an image in which a group of subjects is upright, centered and as large as will fit.
+        /// Works out the rotation of an image that makes a group of subjects upright.
         /// </summary>
-        /// <param name="subjectBounds">Bounding boxes of the subjects, relative to the image</param>
         /// <param name="subjectTilts">
         /// The clockwise angles, in degrees, by which the subjects are known to be rotated away from upright.
         /// The image is counter-rotated by their average. Subjects whose tilt is unknown are simply left out.
         /// </param>
-        /// <param name="imageSize">The size of the image</param>
-        /// <param name="viewportSize">The size of the area the image is displayed in</param>
-        /// <param name="fill">
-        /// The fraction of the viewport that the subjects should span, in whichever dimension is the tighter fit
-        /// </param>
         /// <returns>
-        /// The view, or null if there is nothing to frame or nowhere to display it
+        /// The clockwise rotation of the image, in degrees within [0, 360)
         /// </returns>
-        public static SubjectFrame? GetFrame(IEnumerable<Rect> subjectBounds,
-                                             IEnumerable<double> subjectTilts,
-                                             Size imageSize,
-                                             Size viewportSize,
-                                             double fill)
+        public static double GetUprightRotation(IEnumerable<double> subjectTilts)
         {
-            return GetFrame(subjectBounds, -GetAverageAngle(subjectTilts), imageSize, viewportSize, fill);
+            return NormalizeAngle(-GetAverageAngle(subjectTilts));
         }
 
         /// <summary>
         /// Works out the view of an image, rotated by a given amount, in which a group of subjects is centered and as large as will fit.
         /// </summary>
+        /// <remarks>
+        /// Where the subjects end up depends on the rotation and the scale, so the three parts of the view only
+        /// make sense together. If the rotation or scale is not free to change, the one in effect has to be passed in.
+        /// </remarks>
         /// <param name="subjectBounds">Bounding boxes of the subjects, relative to the image</param>
         /// <param name="rotation">The clockwise rotation of the image, in degrees</param>
         /// <param name="imageSize">The size of the image</param>
         /// <param name="viewportSize">The size of the area the image is displayed in</param>
         /// <param name="fill">
         /// The fraction of the viewport that the subjects should span, in whichever dimension is the tighter fit
+        /// </param>
+        /// <param name="scale">
+        /// The scale factor to center the subjects at, or null for the one at which they are as large as will fit
         /// </param>
         /// <returns>
         /// The view, or null if there is nothing to frame or nowhere to display it
@@ -60,7 +57,8 @@ namespace ImageOrganizer
                                              double rotation,
                                              Size imageSize,
                                              Size viewportSize,
-                                             double fill)
+                                             double fill,
+                                             double? scale = null)
         {
             // Rotating the image about its center, as the control does, leaves the subjects somewhere
             // new. The extents they then cover determine the scale and what is brought to the center.
@@ -91,13 +89,13 @@ namespace ImageOrganizer
             if (!(extent.X > 0) || !(extent.Y > 0) || !(viewportSize.Width > 0) || !(viewportSize.Height > 0))
                 return null;
 
-            var scale = fill * Math.Min(viewportSize.Width / extent.X, viewportSize.Height / extent.Y);
+            var frameScale = scale ?? (fill * Math.Min(viewportSize.Width / extent.X, viewportSize.Height / extent.Y));
             var subjectCenter = (minimum + maximum) / 2;
 
             return new SubjectFrame(NormalizeAngle(rotation),
-                                    scale,
-                                    scale * (imageCenter.X - subjectCenter.X),
-                                    scale * (imageCenter.Y - subjectCenter.Y));
+                                    frameScale,
+                                    frameScale * (imageCenter.X - subjectCenter.X),
+                                    frameScale * (imageCenter.Y - subjectCenter.Y));
         }
 
         /// <summary>

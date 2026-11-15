@@ -106,7 +106,7 @@ namespace ImageOrganizer.Controls
             DependencyProperty.Register(nameof(LockTranslation),
                                         typeof(bool),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(true));
+                                        new PropertyMetadata(false));
 
         public bool LockScaling
         {
@@ -118,7 +118,7 @@ namespace ImageOrganizer.Controls
             DependencyProperty.Register(nameof(LockScaling),
                                         typeof(bool),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(true));
+                                        new PropertyMetadata(false));
 
         public bool LockRotation
         {
@@ -130,7 +130,7 @@ namespace ImageOrganizer.Controls
             DependencyProperty.Register(nameof(LockRotation),
                                         typeof(bool),
                                         typeof(ImagePresenterControl),
-                                        new PropertyMetadata(true));
+                                        new PropertyMetadata(false));
 
         public bool IsAutoAdvanceActive
         {

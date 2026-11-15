@@ -126,9 +126,9 @@ namespace ImageOrganizer.Controls
             // values, OnImageTransformChanged never fires, so update the transform explicitly.
             _layers[layerIndex].UpdateTransform();
 
-            LockTranslation = false;
-            LockScaling = false;
-            LockRotation = false;
+            //LockTranslation = false;
+            //LockScaling = false;
+            //LockRotation = false;
             EnableCropMode = false;
 
             // The subjects belong to the image of the active layer.
@@ -147,9 +147,9 @@ namespace ImageOrganizer.Controls
 
             _layers.Clear();
 
-            LockTranslation = true;
-            LockScaling = true;
-            LockRotation = true;
+            LockTranslation = false;
+            LockScaling = false;
+            LockRotation = false;
             EnableCropMode = false;
 
             // Add the background layer back to the list
@@ -162,9 +162,13 @@ namespace ImageOrganizer.Controls
             if (layerIndex < 0 || layerIndex >= _layers.Count)
                 return;
 
-            ImageScale = _layers[layerIndex].GetFitScale(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight);
-            ImageTranslationX = 0;
-            ImageTranslationY = 0;
+            if (!LockScaling)
+                ImageScale = _layers[layerIndex].GetFitScale(SwapChainPanel.ActualWidth, SwapChainPanel.ActualHeight);
+            if (!LockTranslation)
+            {
+                ImageTranslationX = 0;
+                ImageTranslationY = 0;
+            }
         }
 
         /// <summary>
@@ -332,14 +336,14 @@ namespace ImageOrganizer.Controls
             if (ip.EnableCropMode && layer.ImageFile is not null)
             {
                 ip.LockRotation = true;
-                ip.ToggleButtonAllowRotation.IsEnabled = false;
+                ip.ToggleButtonLockRotation.IsEnabled = false;
                 ip.ImageRotation = 0;
                 layer.CropRectangle = layer.TransformedImageQuadrilateral.BoundingBox;
             }
             else
             {
                 ip.LockRotation = false;
-                ip.ToggleButtonAllowRotation.IsEnabled = true;
+                ip.ToggleButtonLockRotation.IsEnabled = true;
                 layer.CropRectangle = Rect.Empty;
             }
         }
@@ -487,7 +491,7 @@ namespace ImageOrganizer.Controls
             }
             else if (sender.Key == VirtualKey.F)
             {
-                if (ActiveLayerInstance?.ImageFile is not null)
+                if (ActiveLayerInstance?.ImageFile is not null && !LockScaling)
                 {
                     if (sender.Modifiers.HasFlag(VirtualKeyModifiers.Control))
                         ImageScale = 1;
@@ -652,28 +656,32 @@ namespace ImageOrganizer.Controls
         private void SwapChainPanel_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             SwapChainPanel?.SwapChain?.ResizeBuffers(e.NewSize);
-            var actualWidth = SwapChainPanel?.ActualWidth ?? 0;
-            var actualHeight = SwapChainPanel?.ActualHeight ?? 0;
 
-            // Re-apply relative scale so it stays consistent with the new panel size
-            var oldScale = ImageScale;
-            var relative = RelativeImageScale;
-
-            _isScaling = true;
-            ImageScale = relative * (ActiveLayerInstance?.GetFitScale(actualWidth, actualHeight) ?? 1.0);
-            LinearImageScale = ImageScale > 0 ? Math.Log2(ImageScale) * 10 : 0;
-
-            // Keep the image point at the viewport center fixed:
-            // the point displayed at the panel center is offset from the image center
-            // by -Translation / scale (in image space), so scaling the translation by
-            // the scale ratio preserves that point at the new center.
-            if (oldScale > 0)
+            if (!LockScaling)
             {
-                var scaleRatio = ImageScale / oldScale;
-                ImageTranslationX *= scaleRatio;
-                ImageTranslationY *= scaleRatio;
+                var actualWidth = SwapChainPanel?.ActualWidth ?? 0;
+                var actualHeight = SwapChainPanel?.ActualHeight ?? 0;
+
+                // Re-apply relative scale so it stays consistent with the new panel size
+                var oldScale = ImageScale;
+                var relative = RelativeImageScale;
+
+                _isScaling = true;
+                ImageScale = relative * (ActiveLayerInstance?.GetFitScale(actualWidth, actualHeight) ?? 1.0);
+                LinearImageScale = ImageScale > 0 ? Math.Log2(ImageScale) * 10 : 0;
+
+                // Keep the image point at the viewport center fixed:
+                // the point displayed at the panel center is offset from the image center
+                // by -Translation / scale (in image space), so scaling the translation by
+                // the scale ratio preserves that point at the new center.
+                if (oldScale > 0 && !LockTranslation)
+                {
+                    var scaleRatio = ImageScale / oldScale;
+                    ImageTranslationX *= scaleRatio;
+                    ImageTranslationY *= scaleRatio;
+                }
+                _isScaling = false;
             }
-            _isScaling = false;
 
             ActiveLayerInstance?.UpdateTransform();
         }
@@ -973,14 +981,17 @@ namespace ImageOrganizer.Controls
             else if (!LockScaling && prevScaledImageSourceRect.Contains(point.Position))
             {
                 LinearImageScale += delta;
-                var boundingBox = layer.TransformedImageQuadrilateral.BoundingBox;
-                var widthDelta = boundingBox.Width - prevScaledImageSourceRect.Width;
-                var heightDelta = boundingBox.Height - prevScaledImageSourceRect.Height;
-                var pointerOffsetX = point.Position.X - prevScaledImageSourceRect.GetCenterPoint().X;
-                var pointerOffsetY = point.Position.Y - prevScaledImageSourceRect.GetCenterPoint().Y;
+                if (!LockTranslation)
+                {
+                    var boundingBox = layer.TransformedImageQuadrilateral.BoundingBox;
+                    var widthDelta = boundingBox.Width - prevScaledImageSourceRect.Width;
+                    var heightDelta = boundingBox.Height - prevScaledImageSourceRect.Height;
+                    var pointerOffsetX = point.Position.X - prevScaledImageSourceRect.GetCenterPoint().X;
+                    var pointerOffsetY = point.Position.Y - prevScaledImageSourceRect.GetCenterPoint().Y;
 
-                ImageTranslationX -= (widthDelta * (pointerOffsetX / (prevScaledImageSourceRect.Width / 2))) / 2;
-                ImageTranslationY -= (heightDelta * (pointerOffsetY / (prevScaledImageSourceRect.Height / 2))) / 2;
+                    ImageTranslationX -= (widthDelta * (pointerOffsetX / (prevScaledImageSourceRect.Width / 2))) / 2;
+                    ImageTranslationY -= (heightDelta * (pointerOffsetY / (prevScaledImageSourceRect.Height / 2))) / 2;
+                }
             }
 
             // The image may have moved under the stationary pointer
@@ -1004,15 +1015,21 @@ namespace ImageOrganizer.Controls
 
             if (imageFile.Transform == default)
             {
-                ImageRotation = 0;
+                if (!LockRotation)
+                    ImageRotation = 0;
                 ScaleLayerToFit(layerIndex);
             }
             else
             {
-                RelativeImageScale = imageFile.Transform.Scale;
-                ImageRotation = imageFile.Transform.Rotation;
-                ImageTranslationX = imageFile.Transform.TranslationX;
-                ImageTranslationY = imageFile.Transform.TranslationY;
+                if (!LockScaling)
+                    RelativeImageScale = imageFile.Transform.Scale;
+                if (!LockRotation)
+                    ImageRotation = imageFile.Transform.Rotation;
+                if (!LockTranslation)
+                {
+                    ImageTranslationX = imageFile.Transform.TranslationX;
+                    ImageTranslationY = imageFile.Transform.TranslationY;
+                }
             }
         }
 
