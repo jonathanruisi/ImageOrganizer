@@ -30,6 +30,7 @@ namespace ImageOrganizer
     {
         #region Fields
         private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer? _vramCheckTimer;
+        private bool _areMenuAcceleratorsRegistered;
         #endregion
 
         #region Properties
@@ -75,6 +76,9 @@ namespace ImageOrganizer
         #region Event Handlers
         private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
         {
+            // The menu items are bound to their commands when the window is first activated
+            RegisterMenuAccelerators();
+
             if (args.WindowActivationState == WindowActivationState.Deactivated)
             {
                 TitleBarTitle.Foreground =
@@ -195,6 +199,58 @@ namespace ImageOrganizer
                                                       (int)Math.Round(bounds.Y * scaleFactor),
                                                       (int)Math.Round(bounds.Width * scaleFactor),
                                                       (int)Math.Round(bounds.Height * scaleFactor));
+            }
+        }
+
+        /// <summary>
+        /// Makes the keyboard shortcuts of the menu commands available at the window level.
+        /// </summary>
+        /// <remarks>
+        /// A menu item stops listening for changes to whether its command can run when its menu closes,
+        /// and its shortcut is ignored for as long as the item is left disabled. The shortcuts registered
+        /// here ask the command itself, so they do not depend on the state the menu was last shown in.
+        /// </remarks>
+        private void RegisterMenuAccelerators()
+        {
+            if (_areMenuAcceleratorsRegistered)
+                return;
+
+            _areMenuAcceleratorsRegistered = true;
+            foreach (var menuBarItem in MainMenuBar.Items)
+                RegisterMenuAccelerators(menuBarItem.Items);
+        }
+
+        private void RegisterMenuAccelerators(IEnumerable<MenuFlyoutItemBase> menuItems)
+        {
+            foreach (var menuItem in menuItems)
+            {
+                if (menuItem is MenuFlyoutSubItem subItem)
+                {
+                    RegisterMenuAccelerators(subItem.Items);
+                }
+                else if (menuItem is MenuFlyoutItem { Command: XamlUICommand command } commandItem)
+                {
+                    foreach (var accelerator in command.KeyboardAccelerators)
+                    {
+                        var windowAccelerator = new KeyboardAccelerator
+                        {
+                            Key = accelerator.Key,
+                            Modifiers = accelerator.Modifiers
+                        };
+
+                        windowAccelerator.Invoked += (s, e) =>
+                        {
+                            var parameter = commandItem.CommandParameter;
+                            if (e.Handled || !command.CanExecute(parameter))
+                                return;
+
+                            command.Execute(parameter);
+                            e.Handled = true;
+                        };
+
+                        Content.KeyboardAccelerators.Add(windowAccelerator);
+                    }
+                }
             }
         }
 
