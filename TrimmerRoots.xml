@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ViewModelElement finds every concrete subclass by reflection at startup and builds its XML
+  serialization accessors from their public parameterless constructors and properties.
+  The trimmer cannot see those uses, so they are kept here.
+-->
+<linker>
+  <!-- Subclasses can be declared anywhere in the application -->
+  <assembly fullname="ImageOrganizer" preserve="all" />
+
+  <assembly fullname="Utility.WinUI">
+	<namespace fullname="JLR.Utility.WinUI.ViewModel" preserve="all" />
+  </assembly>
+</linker>
